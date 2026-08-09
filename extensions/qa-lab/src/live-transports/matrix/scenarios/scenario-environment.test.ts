@@ -105,12 +105,18 @@ describe("matrix scenario environment", () => {
     expect(runMatrixQaCanary).toHaveBeenCalledWith(expect.objectContaining({ timeoutMs: 60_000 }));
   });
 
-  it("restores an ordered exec-approval override to defaults from fresh current config", async () => {
+  it("restores ordered override-heavy config to defaults from fresh current config", async () => {
     buildMatrixQaConfig.mockClear();
     const execApprovalOverrides = {
       agentFilter: ["main", "stale"],
       approvers: ["@driver:test", "@stale:test"],
       sessionFilter: ["matrix", "stale"],
+    };
+    const audioOverrides = {
+      scope: {
+        default: "deny" as const,
+        rules: [{ action: "deny" as const }],
+      },
     };
     const baselineConfig = {
       channels: {
@@ -130,6 +136,16 @@ describe("matrix scenario environment", () => {
             },
           },
           enabled: true,
+        },
+      },
+      tools: {
+        media: {
+          audio: {
+            scope: {
+              default: "deny",
+              rules: [{ action: "deny" }],
+            },
+          },
         },
       },
     };
@@ -182,6 +198,7 @@ describe("matrix scenario environment", () => {
         media: {
           audio: {
             scope: {
+              default: "deny",
               rules: [{ action: "allow" }, { action: "deny" }],
             },
           },
@@ -314,6 +331,7 @@ describe("matrix scenario environment", () => {
     const input = {
       config: {
         matrixConfigOverrides: {
+          audio: audioOverrides,
           execApprovals: execApprovalOverrides,
         },
       } as Record<string, unknown>,
@@ -334,7 +352,10 @@ describe("matrix scenario environment", () => {
       baselineConfig,
       expect.objectContaining({
         currentConfig: baselineConfig,
-        overrides: { execApprovals: execApprovalOverrides },
+        overrides: {
+          audio: audioOverrides,
+          execApprovals: execApprovalOverrides,
+        },
       }),
     );
     expect(buildMatrixQaConfig).toHaveBeenNthCalledWith(
@@ -367,6 +388,15 @@ describe("matrix scenario environment", () => {
       plugins: {
         entries: {
           matrix: { enabled: true },
+        },
+      },
+      tools: {
+        media: {
+          audio: {
+            scope: {
+              default: null,
+            },
+          },
         },
       },
     });

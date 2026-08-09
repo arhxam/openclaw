@@ -625,7 +625,7 @@ export function buildMatrixQaConfig(
   const audioScope = restoreOwnedFields(
     currentCfg.tools?.media?.audio?.scope,
     baselineCfg.tools?.media?.audio?.scope,
-    ["rules"],
+    ["default", "rules"],
   );
   if (params.overrides?.toolProfile) {
     tools.profile = params.overrides.toolProfile;

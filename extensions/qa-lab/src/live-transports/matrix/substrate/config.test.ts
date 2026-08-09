@@ -323,7 +323,10 @@ describe("matrix qa config", () => {
           audio: {
             enabled: false,
             prompt: "baseline prompt",
-            scope: { rules: [{ action: "allow", match: { chatType: "direct" } }] },
+            scope: {
+              default: "allow",
+              rules: [{ action: "allow", match: { chatType: "direct" } }],
+            },
           },
         },
       },
@@ -497,7 +500,7 @@ describe("matrix qa config", () => {
         enabled: false,
         prompt: "baseline prompt",
         scope: {
-          default: "deny",
+          default: "allow",
           rules: [{ action: "allow", match: { chatType: "direct" } }],
         },
       },
