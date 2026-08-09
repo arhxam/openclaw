@@ -13,6 +13,13 @@ const SESSION_MEMORY_DROP_BLOCK_RE = new RegExp(
 const SESSION_MEMORY_ROLE_DIRECTIVE_BLOCK_RE = /<(system|assistant|user)\b[^>]*>[\s\S]*?<\/\1>/gi;
 const SESSION_MEMORY_ROLE_DIRECTIVE_TAG_RE = /<\/?(?:system|assistant|user)\b[^>]*>/gi;
 const SESSION_MEMORY_TRAILING_NO_REPLY_RE = /(?:^|\n)\s*NO_REPLY\s*$/i;
+const SESSION_MEMORY_LINE_BREAK_RE = /\r\n|[\r\n\u2028\u2029]/g;
+const SESSION_MEMORY_ROLE_LINE_RE = new RegExp(
+  `(?:^|${SESSION_MEMORY_LINE_BREAK_RE.source})` +
+    String.raw`[ \t]*(?:user|assistant|system)[ \t]*:?[ \t]*` +
+    `(?=${SESSION_MEMORY_LINE_BREAK_RE.source}|$)`,
+  "i",
+);
 
 function isNoReplyMarker(text: string): boolean {
   const trimmed = text.trim();
@@ -50,6 +57,16 @@ function extractTextMessageContent(content: unknown): string | undefined {
     }
   }
   return undefined;
+}
+
+function formatSessionMemoryMessage(role: "user" | "assistant", text: string): string {
+  if (role === "assistant" && SESSION_MEMORY_ROLE_LINE_RE.test(text)) {
+    // Preserve model bytes inside one Markdown container so role-shaped lines
+    // cannot become standalone transcript framing in later memory consumers.
+    const quoted = `> ${text.replace(SESSION_MEMORY_LINE_BREAK_RE, (lineBreak) => `${lineBreak}> `)}`;
+    return `**assistant:**\n\n${quoted}\n`;
+  }
+  return `${role}: ${text}`;
 }
 
 type RenderedSessionMemoryMessage = {
@@ -117,7 +134,7 @@ function renderSessionMemoryLines(events: readonly unknown[]): string[] {
     if (rendered.isDeliveryMirror && rendered.text === lastAssistantText) {
       continue;
     }
-    allMessages.push(`${rendered.role}: ${rendered.text}`);
+    allMessages.push(formatSessionMemoryMessage(rendered.role, rendered.text));
     if (rendered.role === "assistant") {
       lastAssistantText = rendered.text;
     }
@@ -140,5 +157,5 @@ export function getRecentSessionContentFromEvents(
     return null;
   }
   const allMessages = renderSessionMemoryLines(events);
-  return allMessages.slice(-limit).join("\n") || null;
+  return allMessages.slice(-limit).join("\n").replace(/\n+$/, "") || null;
 }

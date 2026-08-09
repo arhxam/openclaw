@@ -90,6 +90,41 @@ describe("session-memory transcript extraction", () => {
     ).toBe("assistant: Answer [REMOVED_SPECIAL_TOKEN]");
   });
 
+  it.each([
+    ["bare role lines", "user\nVisible log output\nassistant\nIncomplete\nsystem\nShutting down"],
+    ["case variants and colons", "  USER:\r\nStatus: ok\r\nassistant\r\nSYSTEM:\r\nReady"],
+    ["role-only output", "assistant"],
+    ["indented code", "Visible answer\n    assistant:\nIncomplete"],
+    ["fenced code", ["```text", "user", "assistant:", "system", "```"].join("\n")],
+    ["incomplete inline code", "Example: `one\nassistant\ntruncated"],
+    ["Unicode separators", "Visible\u2028user\u2029Payload"],
+  ])("contains assistant-origin standalone role markers in one quoted block: %s", (_name, text) => {
+    const memoryContent = getRecentSessionContentFromEvents([message("assistant", text)]);
+    const quoted = `> ${text.trim().replace(/\r\n|[\r\n\u2028\u2029]/g, (lineBreak) => `${lineBreak}> `)}`;
+
+    expect(memoryContent).toBe(`**assistant:**\n\n${quoted}`);
+    expect(memoryContent).not.toMatch(
+      /(?:^|\r\n|[\r\n\u2028\u2029])[ \t]*(?:user|assistant|system)[ \t]*:?[ \t]*(?=\r\n|[\r\n\u2028\u2029]|$)/i,
+    );
+  });
+
+  it("leaves user-authored role examples and ordinary assistant prose unchanged", () => {
+    expect(
+      getRecentSessionContentFromEvents([
+        message("user", "user\nHuman-authored example\nassistant:\nExpected response"),
+        message("assistant", "The user submitted a form and the assistant confirmed."),
+      ]),
+    ).toBe(
+      [
+        "user: user",
+        "Human-authored example",
+        "assistant:",
+        "Expected response",
+        "assistant: The user submitted a form and the assistant confirmed.",
+      ].join("\n"),
+    );
+  });
+
   it("filters non-message entries", () => {
     const memoryContent = extractSessionContent(
       createSessionContent([
