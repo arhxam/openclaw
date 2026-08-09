@@ -320,6 +320,8 @@ export function createTelegramInboundProcessing({
                 contentType: media.contentType,
                 kind: media.kind,
                 stickerMetadata: media.stickerMetadata,
+                unavailableReason: media.unavailableReason,
+                sourceMessageId: String(msg.message_id),
               }
             : { kind: nativeMedia.kind },
         ]

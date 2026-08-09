@@ -196,6 +196,80 @@ describe("buildTelegramMessageContext media carriers", () => {
     expect(context?.ctxPayload.StickerMediaIncluded).toBeUndefined();
   });
 
+  it("explains unavailable hydrated reply stickers in reply context", async () => {
+    const context = await buildTelegramMessageContextForTest({
+      message: {
+        chat: { id: 42, type: "private", first_name: "Ada" },
+        text: "What was that?",
+      },
+      replyChain: [
+        {
+          messageId: "10",
+          sender: "Pat",
+          mediaKind: "sticker",
+          mediaUnavailableReason: "video-sticker",
+        },
+      ],
+    });
+
+    expect(context?.ctxPayload.ReplyToBody).toContain(
+      "OpenClaw did not stage or analyze this video Telegram sticker",
+    );
+  });
+
+  it("explains unavailable ancestor stickers in the rendered reply chain", async () => {
+    const context = await buildTelegramMessageContextForTest({
+      message: {
+        chat: { id: 42, type: "private", first_name: "Ada" },
+        text: "What was that?",
+      },
+      replyChain: [
+        {
+          messageId: "11",
+          replyToId: "10",
+          sender: "Pat",
+          body: "The sticker above",
+        },
+        {
+          messageId: "10",
+          sender: "Lee",
+          mediaKind: "sticker",
+          mediaUnavailableReason: "animated-sticker",
+        },
+      ],
+    });
+
+    expect(context?.ctxPayload.ReplyToBody).toBe("The sticker above");
+    expect(context?.ctxPayload.Body).toContain(
+      "OpenClaw did not stage or analyze this animated Telegram sticker",
+    );
+  });
+
+  it("preserves unavailable sticker notices in accepted group history", async () => {
+    const groupHistories = new Map();
+    await buildTelegramMessageContextForTest({
+      message: {
+        chat: { id: -1003, type: "supergroup", title: "Stickers" },
+        text: undefined,
+        sticker: {
+          file_id: "sticker-3",
+          file_unique_id: "sticker-u3",
+          type: "regular",
+          width: 1,
+          height: 1,
+          is_animated: false,
+          is_video: true,
+        },
+      },
+      allMedia: [{ kind: "sticker", unavailableReason: "video-sticker" }],
+      groupHistories,
+      historyLimit: 5,
+    });
+
+    const historyBody = [...groupHistories.values()].flat().at(-1)?.body;
+    expect(historyBody).toContain("OpenClaw did not stage or analyze this video Telegram sticker");
+  });
+
   it("preserves cached sticker descriptions in group history", async () => {
     const groupHistories = new Map();
     await buildTelegramMessageContextForTest({
