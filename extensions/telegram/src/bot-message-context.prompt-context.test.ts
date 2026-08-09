@@ -305,21 +305,24 @@ describe("buildTelegramMessageContext prompt context", () => {
       telegramCfg,
       undefined,
       new Map([
-        [
-          "10",
-          { kind: "sticker" as const, unavailableReason: "animated-sticker" as const },
-        ],
+        ["10", { kind: "sticker" as const, unavailableReason: "animated-sticker" as const }],
       ]),
     );
 
-    expect(promptContext[0]?.payload.messages).toEqual([
+    expect(promptContext).toEqual([
       expect.objectContaining({
-        message_id: "10",
-        body: expect.stringContaining(
-          "OpenClaw did not stage or analyze this animated Telegram sticker",
-        ),
-        media_type: "sticker",
-        media_ref: undefined,
+        payload: expect.objectContaining({
+          messages: [
+            expect.objectContaining({
+              message_id: "10",
+              body: expect.stringContaining(
+                "OpenClaw did not stage or analyze this animated Telegram sticker",
+              ),
+              media_type: "sticker",
+              media_ref: undefined,
+            }),
+          ],
+        }),
       }),
     ]);
     expect(JSON.stringify(promptContext)).not.toContain("telegram:file/animated-sticker-1");
