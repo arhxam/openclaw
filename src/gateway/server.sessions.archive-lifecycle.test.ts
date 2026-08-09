@@ -181,6 +181,9 @@ async function invokeArchiveHandler(params: {
 }): Promise<LifecycleHandlerResponse> {
   const handlers = await getSessionsHandlers();
   let response: LifecycleHandlerResponse | undefined;
+  const respond: RespondFn = (ok, payload, error) => {
+    response = { ok, payload, error };
+  };
   await handlers["sessions.patch"]?.({
     req: {} as never,
     params: { key: params.sessionKey, archived: true },
@@ -188,9 +191,7 @@ async function invokeArchiveHandler(params: {
     context: params.context,
     isWebchatConnect: () => false,
     sessionMutationAuthorization: params.authorization,
-    respond: (ok, payload, error) => {
-      response = { ok, payload, error };
-    },
+    respond,
   } as never);
   if (!response) {
     throw new Error("sessions.patch did not respond");
@@ -206,13 +207,14 @@ async function invokeVisibilityHandler(params: {
 }): Promise<LifecycleHandlerResponse> {
   const handlers = await getSessionsHandlers();
   let response: LifecycleHandlerResponse | undefined;
+  const respond: RespondFn = (ok, payload, error) => {
+    response = { ok, payload, error };
+  };
   await handlers["session.visibility.set"]?.({
     params: { sessionKey: params.sessionKey, visibility: params.visibility },
     client: params.client,
     context: params.context,
-    respond: (ok, payload, error) => {
-      response = { ok, payload, error };
-    },
+    respond,
   } as never);
   if (!response) {
     throw new Error("session.visibility.set did not respond");
