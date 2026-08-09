@@ -46,6 +46,9 @@ function propertyAt(
 describe("createCronToolSchema", () => {
   const schema = createCronTool().parameters;
   const schemaRecord = schema as unknown as Record<string, unknown>;
+  const scopedSchemaRecord = createCronTool({
+    agentSessionKey: "agent:main:telegram:direct:alice",
+  }).parameters as unknown as Record<string, unknown>;
   const providerSchemaRecord = normalizeToolParameterSchema(schema, {
     modelProvider: "gemini",
   }) as unknown as Record<string, unknown>;
@@ -108,6 +111,13 @@ describe("createCronToolSchema", () => {
 
   it("does not ship a separate patch object schema (#121606)", () => {
     expect(schemaRecord.properties).not.toHaveProperty("patch");
+  });
+
+  it("omits immutable job.agentId only for scoped agent callers", () => {
+    expect(keysAt(scopedSchemaRecord, "job")).not.toContain("agentId");
+    expect(keysAt(schemaRecord, "job")).toContain("agentId");
+
+    expect(propertyAt(scopedSchemaRecord, "agentId")).toBeDefined();
   });
 
   it("exposes next_check with its relative duration parameter", () => {

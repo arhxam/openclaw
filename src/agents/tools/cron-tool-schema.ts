@@ -46,6 +46,8 @@ const CRON_DELIVERY_MODES = ["none", "announce", "webhook"] as const;
 const CRON_RUN_MODES = ["due", "force"] as const;
 
 type CronToolSchemaOptions = {
+  /** Whether the caller may retarget an existing job to another agent. */
+  allowAgentRetargeting?: boolean;
   /**
    * Whether cron.triggers.enabled is on for this deployment. When false, the
    * trigger-gated surfaces (job trigger, script payloads, stream
@@ -278,7 +280,10 @@ function createCronFailureAlertSchema(): TSchema {
   );
 }
 
-function createCronJobObjectSchema(params: { triggersEnabled: boolean }): TSchema {
+function createCronJobObjectSchema(params: {
+  allowAgentRetargeting: boolean;
+  triggersEnabled: boolean;
+}): TSchema {
   return Type.Optional(
     Type.Object(
       {
@@ -315,7 +320,9 @@ function createCronJobObjectSchema(params: { triggersEnabled: boolean }): TSchem
         wakeMode: optionalStringEnum(CRON_WAKE_MODES, { description: "Wake timing" }),
         payload: createCronPayloadSchema({ triggersEnabled: params.triggersEnabled }),
         delivery: createCronDeliverySchema(),
-        agentId: nullableStringSchema("Agent id, or null to clear it"),
+        ...(params.allowAgentRetargeting
+          ? { agentId: nullableStringSchema("Agent id, or null to clear it") }
+          : {}),
         description: Type.Optional(Type.String({ description: "Human description" })),
         enabled: Type.Optional(Type.Boolean()),
         deleteAfterRun: Type.Optional(Type.Boolean({ description: "Delete after first run" })),
@@ -346,7 +353,10 @@ export function createCronToolSchema(options?: CronToolSchemaOptions): TSchema {
       offset: optionalNonNegativeIntegerSchema({
         description: 'Job offset for action="list"; use nextOffset to load the next page',
       }),
-      job: createCronJobObjectSchema({ triggersEnabled }),
+      job: createCronJobObjectSchema({
+        allowAgentRetargeting: options?.allowAgentRetargeting !== false,
+        triggersEnabled,
+      }),
       jobId: Type.Optional(Type.String()),
       id: Type.Optional(Type.String()),
       in: Type.Optional(

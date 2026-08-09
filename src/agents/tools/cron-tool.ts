@@ -226,7 +226,10 @@ export function createCronTool(opts?: CronToolOptions, deps?: CronToolDeps): Any
     name: AUTOMATIONS_TOOL_NAME,
     displaySummary: CRON_TOOL_DISPLAY_SUMMARY,
     description: buildCronToolDescription({ triggersEnabled }),
-    parameters: createCronToolSchema({ triggersEnabled }),
+    parameters: createCronToolSchema({
+      allowAgentRetargeting: !opts?.agentSessionKey?.trim(),
+      triggersEnabled,
+    }),
     execute: async (_toolCallId, args, operationSignal) => {
       operationSignal?.throwIfAborted();
       const params = args as Record<string, unknown>;
