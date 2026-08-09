@@ -333,6 +333,10 @@ describe("runSystemAgentTurn", () => {
       native: [],
       openClaw: ["openclaw"],
     });
+    expect(listAgentEntries(call.config ?? {}).filter((agent) => agent.id === "openclaw")).toEqual([
+      { id: "openclaw" },
+    ]);
+    expect(listAgentEntries(call.config ?? {}).find((agent) => agent.id === "ops")).toBeDefined();
     expect(call.toolsAllow).toBeUndefined();
     expect(requireValue(call.systemAgentTool, "missing CLI OpenClaw tool").proposalRef).toBe(
       session.proposalRef,

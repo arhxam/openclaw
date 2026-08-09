@@ -87,25 +87,13 @@ function projectSystemAgentExecutionConfig(
   const retainedAgents = agents.filter(
     (agent) => normalizeAgentId(agent.id) !== SYSTEM_AGENT_EXECUTION_AGENT_ID,
   );
-  const hasProjectedSettings = routeAgent?.params !== undefined || routeAgent?.tools !== undefined;
-  if (retainedAgents.length === agents.length && !hasProjectedSettings) {
-    return config;
-  }
   const projectedAgents = [
     ...retainedAgents,
-    ...(hasProjectedSettings
-      ? [
-          {
-            id: SYSTEM_AGENT_EXECUTION_AGENT_ID,
-            ...(routeAgent?.params !== undefined
-              ? { params: structuredClone(routeAgent.params) }
-              : {}),
-            ...(routeAgent?.tools !== undefined
-              ? { tools: structuredClone(routeAgent.tools) }
-              : {}),
-          },
-        ]
-      : []),
+    {
+      id: SYSTEM_AGENT_EXECUTION_AGENT_ID,
+      ...(routeAgent?.params !== undefined ? { params: structuredClone(routeAgent.params) } : {}),
+      ...(routeAgent?.tools !== undefined ? { tools: structuredClone(routeAgent.tools) } : {}),
+    },
   ];
   const { list: _legacyList, ...agentsConfig } = config.agents ?? {};
   return {
