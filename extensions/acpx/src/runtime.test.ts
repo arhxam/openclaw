@@ -617,7 +617,10 @@ describe("AcpxRuntime fresh reset wrapper", () => {
     });
   });
 
-  it("strips the OpenClaw Anthropic provider prefix for Claude ACP startup", async () => {
+  it.each([
+    ["anthropic/claude-sonnet-4-6", "claude-sonnet-4-6"],
+    ["amazon-bedrock/us.anthropic.claude-sonnet-4-6-v1:0", "us.anthropic.claude-sonnet-4-6-v1:0"],
+  ])("strips the OpenClaw provider prefix for Claude ACP startup", async (model, expected) => {
     const baseStore: TestSessionStore = {
       load: vi.fn(async () => undefined),
       save: vi.fn(async () => {}),
@@ -639,15 +642,15 @@ describe("AcpxRuntime fresh reset wrapper", () => {
       sessionKey: "agent:claude:acp:test",
       agent: "claude",
       mode: "persistent",
-      model: "anthropic/claude-sonnet-4-6",
+      model,
     });
 
     expect(readFirstEnsureSessionInput(ensure)).toEqual({
       sessionKey: "agent:claude:acp:test",
       agent: "claude",
       mode: "persistent",
-      model: "claude-sonnet-4-6",
-      sessionOptions: { model: "claude-sonnet-4-6" },
+      model: expected,
+      sessionOptions: { model: expected },
     });
   });
 
@@ -665,6 +668,12 @@ describe("AcpxRuntime fresh reset wrapper", () => {
       "claude-sonnet-4-6-1m",
     );
     expect(testing.normalizeClaudeAcpModelOverride("custom-model")).toBe("custom-model");
+    expect(
+      testing.normalizeClaudeAcpModelOverride("Amazon-Bedrock/us.anthropic.claude-sonnet-4-6-v1:0"),
+    ).toBe("us.anthropic.claude-sonnet-4-6-v1:0");
+    const inferenceProfileArn =
+      "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6-v1:0";
+    expect(testing.normalizeClaudeAcpModelOverride(inferenceProfileArn)).toBe(inferenceProfileArn);
   });
 
   it("leaves Codex ACP startup defaults alone when no model or thinking is provided", async () => {
@@ -1821,7 +1830,10 @@ describe("AcpxRuntime fresh reset wrapper", () => {
     expect(setConfigOption).not.toHaveBeenCalled();
   });
 
-  it("normalizes model config controls for claude-agent-acp", async () => {
+  it.each([
+    ["anthropic/claude-sonnet-4-6", "claude-sonnet-4-6"],
+    ["amazon-bedrock/us.anthropic.claude-sonnet-4-6-v1:0", "us.anthropic.claude-sonnet-4-6-v1:0"],
+  ])("normalizes model config controls for claude-agent-acp", async (value, expected) => {
     const baseStore: TestSessionStore = {
       load: vi.fn(async () => ({
         acpxRecordId: "agent:claude:acp:test",
@@ -1841,14 +1853,14 @@ describe("AcpxRuntime fresh reset wrapper", () => {
     await runtime.setConfigOption({
       handle,
       key: "model",
-      value: "anthropic/claude-sonnet-4-6",
+      value,
     });
 
     expect(setConfigOption).toHaveBeenCalledOnce();
     expect(setConfigOption).toHaveBeenCalledWith({
       handle,
       key: "model",
-      value: "claude-sonnet-4-6",
+      value: expected,
     });
   });
 
