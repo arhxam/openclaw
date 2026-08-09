@@ -146,10 +146,11 @@ type MatrixQaGroupSnapshot = {
 };
 
 type MatrixQaGroupEntry = Omit<MatrixQaGroupSnapshot, "roomId">;
-type MatrixQaChannelConfig = NonNullable<OpenClawConfig["channels"]>["matrix"];
-type MatrixQaChannelAccountConfig = NonNullable<
-  NonNullable<MatrixQaChannelConfig>["accounts"]
->[string];
+type MatrixQaChannelAccountConfig = Record<string, unknown> & {
+  groups?: Record<string, MatrixQaGroupEntry & Record<string, unknown>>;
+  network?: Record<string, unknown>;
+  streaming?: Record<string, unknown>;
+};
 
 function restoreOwnedFields(
   current: unknown,
