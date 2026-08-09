@@ -454,11 +454,13 @@ export async function buildTelegramInboundContextPayload(params: {
           (media) => media.sourceMessageId === String(bufferedMessage.message_id),
         )?.unavailableReason;
         const textParts = getTelegramTextParts(bufferedMessage);
-        const segmentBody =
-          renderTelegramTextEntities(textParts.text, textParts.entities) ||
-          (unavailableReason
-            ? formatTelegramUnavailableStickerNotice(unavailableReason)
-            : formatMediaPlaceholderText(bufferedMedia ? [{ kind: bufferedMedia.kind }] : []));
+        const renderedText = renderTelegramTextEntities(textParts.text, textParts.entities);
+        const mediaContext = unavailableReason
+          ? formatTelegramUnavailableStickerNotice(unavailableReason)
+          : renderedText
+            ? undefined
+            : formatMediaPlaceholderText(bufferedMedia ? [{ kind: bufferedMedia.kind }] : []);
+        const segmentBody = [renderedText, mediaContext].filter(Boolean).join("\n");
         if (!segmentBody) {
           return [];
         }

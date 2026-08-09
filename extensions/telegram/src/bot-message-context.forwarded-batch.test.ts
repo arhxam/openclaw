@@ -232,6 +232,7 @@ describe("buildTelegramMessageContext forwarded debounce batches", () => {
             date: 1_700_000_001,
             chat,
             from: sender,
+            caption: "captioned sticker",
             sticker: {
               file_id: "animated-sticker",
               file_unique_id: "animated-sticker-unique",
@@ -252,7 +253,7 @@ describe("buildTelegramMessageContext forwarded debounce batches", () => {
     });
 
     expect(context?.ctxPayload.BodyForAgent).toMatch(
-      /ordinary note\n\[Forwarded from Original B[^\]]*\]\n\[Sticker unavailable: OpenClaw did not stage or analyze this animated Telegram sticker\.\]/,
+      /ordinary note\n\[Forwarded from Original B[^\]]*\]\ncaptioned sticker\n\[Sticker unavailable: OpenClaw did not stage or analyze this animated Telegram sticker\.\]/,
     );
     expect(context?.ctxPayload.BodyForAgent).not.toContain("<media:sticker>");
   });
