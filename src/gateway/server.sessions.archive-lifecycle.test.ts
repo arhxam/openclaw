@@ -8,6 +8,7 @@ import {
   isSessionLifecycleMutationActive,
   runExclusiveSessionLifecycleMutation,
 } from "../sessions/session-lifecycle-admission.js";
+import { createDeferred } from "../shared/deferred.js";
 import { closeOpenClawStateDatabaseForTest } from "../state/openclaw-state-db.js";
 import { markChatAbortTerminalPersistenceError } from "./chat-abort-lifecycle-internal.js";
 import { registerChatAbortController, removeChatAbortControllerEntry } from "./chat-abort.js";
@@ -19,7 +20,6 @@ import {
 } from "./session-sharing.js";
 import { embeddedRunMock, writeSessionStore } from "./test-helpers.js";
 import {
-  createDeferred,
   directSessionReq,
   expectNoSessionQueueCleanup,
   getGatewayConfigModule,

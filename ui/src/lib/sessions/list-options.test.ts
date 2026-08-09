@@ -84,11 +84,11 @@ describe("session list replacement options", () => {
       includeDerivedTitles: true,
       limit: 50,
     });
-    expect(request).toHaveBeenCalledWith(
-      "sessions.patch",
-      { key, agentId: "main", pinned: true },
-      undefined,
-    );
+    expect(request).toHaveBeenCalledWith("sessions.patch", {
+      key,
+      agentId: "main",
+      pinned: true,
+    });
     sessions.dispose();
   });
 

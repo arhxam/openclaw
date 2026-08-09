@@ -107,11 +107,14 @@ export async function patchSessionRows(
       break;
     }
     try {
-      const result = await scope.client.request<SessionsPatchManyResult>(
-        "sessions.patchMany",
-        params,
-        patch.archived === true ? SESSION_ARCHIVE_REQUEST_OPTIONS : undefined,
-      );
+      const result =
+        patch.archived === true
+          ? await scope.client.request<SessionsPatchManyResult>(
+              "sessions.patchMany",
+              params,
+              SESSION_ARCHIVE_REQUEST_OPTIONS,
+            )
+          : await scope.client.request<SessionsPatchManyResult>("sessions.patchMany", params);
       if (!host.sessionData.isSessionMutationScopeCurrent(scope)) {
         return null;
       }

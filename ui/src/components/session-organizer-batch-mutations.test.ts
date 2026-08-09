@@ -210,14 +210,16 @@ describe("patchSessionRows", () => {
       ).resolves.toBe(fallbackRows);
 
       expect(harness.request).toHaveBeenCalledOnce();
-      expect(harness.request.mock.calls[0]).toEqual([
+      const requestCall = harness.request.mock.calls[0]!;
+      expect(requestCall.slice(0, 2)).toEqual([
         "sessions.patchMany",
         {
           targets: [{ key: rows[0]!.key, agentId: "main" }],
           patch: { archived },
         },
-        archived ? { timeoutMs: 10 * 60_000 } : undefined,
       ]);
+      expect(requestCall).toHaveLength(archived ? 3 : 2);
+      expect(requestCall[2]).toEqual(archived ? { timeoutMs: 10 * 60_000 } : undefined);
       expect(fallback).toHaveBeenCalledOnce();
       expect(harness.refreshReplacement).not.toHaveBeenCalled();
       expect(harness.publishSessionMutationError).not.toHaveBeenCalled();
