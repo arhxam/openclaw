@@ -560,9 +560,9 @@ type ExternalPluginDocsInventorySeedEntry = {
 };
 
 function collectExternalPluginDocsInventoryEntries(): PluginSourceEntry[] {
-  const seed = readJsonPath(
-    path.join(ROOT, "scripts/lib/official-external-channel-seed.json"),
-  ) as { entries?: ExternalPluginDocsInventorySeedEntry[] };
+  const seed = readJsonPath(path.join(ROOT, "scripts/lib/official-external-channel-seed.json")) as {
+    entries?: ExternalPluginDocsInventorySeedEntry[];
+  };
   const entries: PluginSourceEntry[] = [];
   for (const entry of Array.isArray(seed.entries) ? seed.entries : []) {
     const inventory = entry?.openclaw?.channelHostConfig?.docsInventory;
@@ -636,8 +636,8 @@ function collectPluginRecords() {
       continue;
     }
     records.push({
-      description: resolveDescription({ manifest, packageJson }),
-      docs: resolveDocs({ dirName, manifest, packageJson }),
+      description: resolveDescription({ dirName, id, manifest, packageJson }),
+      docs: resolveDocs({ dirName, id, manifest, packageJson }),
       id,
       installRoute: resolveInstallRoute(packageJson, "external"),
       name: humanizeId(id),
