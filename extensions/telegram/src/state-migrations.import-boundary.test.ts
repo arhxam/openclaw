@@ -65,7 +65,7 @@ describe("telegram state migration import boundary", () => {
         "message-cache-persistence.ts",
         "sent-message-cache.legacy-state.ts",
         "sticker-cache-store.legacy-state.ts",
-        "thread-bindings.legacy-state.ts",
+        "thread-bindings-store.ts",
       ]),
     );
   });
