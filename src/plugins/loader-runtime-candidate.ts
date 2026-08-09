@@ -438,6 +438,7 @@ export function loadRuntimePluginCandidate(params: {
       candidateOrigin: candidate.origin,
       logger: params.logger,
       pushPluginLoadError,
+      loadLegacySessionSurfaces: context.loadLegacySessionSurfaces,
     })
   ) {
     return;

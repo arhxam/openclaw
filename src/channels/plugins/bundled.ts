@@ -628,25 +628,6 @@ export function listBundledChannelSetupPlugins(): readonly ChannelPlugin[] {
   });
 }
 
-export function listBundledChannelLegacySessionSurfaces(
-  options: { config?: OpenClawConfig } = {},
-): readonly BundledChannelLegacySessionSurface[] {
-  const { rootScope, loadContext } = resolveActiveBundledChannelLoadScope();
-  return listBundledChannelPluginIdsForSetupFeature(rootScope, "legacySessionSurfaces", options)
-    .map((id) => {
-      const entry = getBundledChannelArtifactForRoot("setupEntry", id, rootScope, loadContext);
-      const surface = entry?.loadLegacySessionSurface?.();
-      if (surface) {
-        return surface;
-      }
-      if (entry?.features?.legacySessionSurfaces !== true) {
-        return undefined;
-      }
-      return getBundledChannelArtifactForRoot("setupPlugin", id, rootScope, loadContext)?.messaging;
-    })
-    .filter((surface): surface is BundledChannelLegacySessionSurface => surface !== undefined);
-}
-
 export function getBundledChannelAccountInspector(
   id: ChannelId,
 ): NonNullable<ChannelPlugin["config"]["inspectAccount"]> | undefined {

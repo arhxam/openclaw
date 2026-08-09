@@ -7,6 +7,7 @@ import {
   loadBundledRuntimeChannelPlugin,
   mergeSetupRuntimeChannelPlugin,
   resolveBundledRuntimeChannelRegistration,
+  resolveLegacySessionSurfaceRegistration,
   resolveSetupChannelRegistration,
 } from "./loader-channel-setup.js";
 import type { PluginModuleLoader } from "./loader-module-runtime.js";
@@ -41,11 +42,42 @@ export function loadSetupRuntimeChannelCandidate(params: {
   candidateOrigin: PluginRecord["origin"];
   logger: PluginLogger;
   pushPluginLoadError: (message: string) => void;
+  loadLegacySessionSurfaces: boolean;
 }): boolean {
   const { manifestRecord, record, registrationPlan, runtimeCandidateEntry, registryBuilder } =
     params;
   if (!registrationPlan.loadSetupEntry || !manifestRecord.setupSource) {
     return false;
+  }
+  if (params.loadLegacySessionSurfaces) {
+    const registration = resolveLegacySessionSurfaceRegistration(params.mod);
+    if (registration.loadError) {
+      recordPluginError({
+        logger: params.logger,
+        registry: registryBuilder.registry,
+        record,
+        seenIds: params.seenIds,
+        pluginId: record.id,
+        origin: params.candidateOrigin,
+        phase: "load",
+        error: registration.loadError,
+        logPrefix: `[plugins] ${record.id} failed to load legacy session surface from ${record.source}: `,
+        diagnosticMessagePrefix: "failed to load legacy session surface: ",
+        diagnosticCode: "channel-setup-failure",
+      });
+      return true;
+    }
+    if (!registration.surface) {
+      params.pushPluginLoadError("setup entry does not export loadLegacySessionSurface");
+      return true;
+    }
+    registryBuilder.registry.legacySessionSurfaces.push({
+      pluginId: record.id,
+      surface: registration.surface,
+    });
+    registryBuilder.registry.plugins.push(record);
+    params.seenIds.set(record.id, params.candidateOrigin);
+    return true;
   }
   const setupRegistration = resolveSetupChannelRegistration(params.mod);
   if (setupRegistration.loadError) {

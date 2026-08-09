@@ -9,6 +9,7 @@ export function createEmptyPluginRegistry(): PluginRegistry {
     typedHooks: [],
     channels: [],
     channelSetups: [],
+    legacySessionSurfaces: [],
     providers: [],
     modelCatalogProviders: [],
     sessionCatalogs: [],
