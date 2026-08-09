@@ -306,7 +306,7 @@ test("sessions.patch cancels active work and commits only after admission and te
       interrupted = true;
     },
   });
-  const persistence = createDeferred<void>();
+  const persistence = createDeferred();
   const active = activeRunContext({
     runId,
     sessionId,
@@ -385,7 +385,7 @@ test("sharing revocation fences archive before cancellation and forces fresh aut
       interrupted = true;
     },
   });
-  const persistence = createDeferred<void>();
+  const persistence = createDeferred();
   const active = activeRunContext({ runId, sessionId, sessionKey, persistence });
   const requestContext = await archiveLifecycleRequestContext(active.context);
   const placement = workerPlacement({ sessionId, sessionKey, state: "active" });
@@ -410,7 +410,7 @@ test("sharing revocation fences archive before cancellation and forces fresh aut
     throw new Error("expected resolved sharing target");
   }
 
-  const releaseAudit = createDeferred<void>();
+  const releaseAudit = createDeferred();
   sessionAuditGate.entered.mockClear();
   sessionAuditGate.wait = releaseAudit.promise;
   let sharing: Promise<LifecycleHandlerResponse> | undefined;
@@ -492,11 +492,11 @@ test("archive retains the lifecycle fence until drain and commit before sharing 
     identities: [sessionKey, sessionId],
     assertAllowed: () => {},
   });
-  const persistence = createDeferred<void>();
+  const persistence = createDeferred();
   const active = activeRunContext({ runId, sessionId, sessionKey, persistence });
   const requestContext = await archiveLifecycleRequestContext(active.context);
   let placement = workerPlacement({ sessionId, sessionKey, state: "active" });
-  const reclaimGate = createDeferred<void>();
+  const reclaimGate = createDeferred();
   const reclaim = vi.fn(async () => {
     await reclaimGate.promise;
     placement = workerPlacement({ sessionId, sessionKey, state: "reclaimed" });
@@ -569,9 +569,9 @@ test("alias archive lets the canonical cloud reclaim barrier reenter without dea
   const sessionId = "session-archive-cloud-alias";
   await writeSessionStore({ entries: { [sessionKey]: sessionStoreEntry(sessionId) } });
   let placement = workerPlacement({ sessionId, sessionKey, state: "active" });
-  const reclaimEntered = createDeferred<void>();
-  const allowNestedReclaim = createDeferred<void>();
-  const contenderRelease = createDeferred<void>();
+  const reclaimEntered = createDeferred();
+  const allowNestedReclaim = createDeferred();
+  const contenderRelease = createDeferred();
   const reclaim = vi.fn(async () => {
     reclaimEntered.resolve();
     await allowNestedReclaim.promise;
@@ -752,7 +752,7 @@ test("sessions.patch returns UNAVAILABLE when terminal persistence fails", async
   const sessionId = "session-archive-persistence-failure";
   const runId = "run-archive-persistence-failure";
   await writeSessionStore({ entries: { [sessionKey]: sessionStoreEntry(sessionId) } });
-  const persistence = createDeferred<void>();
+  const persistence = createDeferred();
   const active = activeRunContext({ runId, sessionId, sessionKey, persistence });
   try {
     const archive = directSessionReq(
@@ -862,7 +862,7 @@ test("sessions.patchMany prepares independent archive drains concurrently and re
       [secondKey]: sessionStoreEntry(secondSessionId),
     },
   });
-  const firstDrained = createDeferred<void>();
+  const firstDrained = createDeferred();
   const firstRelease = vi.fn();
   const secondRelease = vi.fn();
   const beginInferenceSessionDrain = vi.fn((sessionId: string) => ({
@@ -1012,7 +1012,7 @@ test("sessions.patch rejects a generation replaced after the exact preparation r
   const sessionId = "session-archive-generation-race";
   const runId = "run-archive-generation-race";
   await writeSessionStore({ entries: { [sessionKey]: sessionStoreEntry(sessionId) } });
-  const persistence = createDeferred<void>();
+  const persistence = createDeferred();
   const active = activeRunContext({ runId, sessionId, sessionKey, persistence });
   let placement = workerPlacement({ sessionId, sessionKey, state: "active" });
   const dispatch = vi.fn();

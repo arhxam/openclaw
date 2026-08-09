@@ -89,7 +89,7 @@ test("sessions.patch reclaims the exact active cloud placement before archive me
   const sessionId = "session-archive-cloud-active";
   await writeSessionStore({ entries: { [sessionKey]: sessionStoreEntry(sessionId) } });
   let placement = workerPlacement({ sessionId, sessionKey, state: "active" });
-  const reclaimGate = createDeferred<void>();
+  const reclaimGate = createDeferred();
   const reclaim = vi.fn(async () => {
     await reclaimGate.promise;
     placement = workerPlacement({ sessionId, sessionKey, state: "reclaimed" });
@@ -200,7 +200,7 @@ test("sessions.patch rejects a placement identity changed during the runtime dra
   const sessionId = "session-archive-cloud-fresh-placement";
   await writeSessionStore({ entries: { [sessionKey]: sessionStoreEntry(sessionId) } });
   let placement = workerPlacement({ sessionId, sessionKey, state: "active" });
-  const drainGate = createDeferred<void>();
+  const drainGate = createDeferred();
   const drainStarted = vi.fn();
   const release = vi.fn();
   const reclaim = vi.fn();
