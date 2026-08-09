@@ -58,6 +58,26 @@ type SqliteTableContract = {
 
 type SqliteSchemaContract = Map<string, SqliteTableContract>;
 
+type SqliteSchemaIssueCode =
+  | "column-definition-drift"
+  | "missing-column"
+  | "missing-or-drifted-index"
+  | "missing-or-drifted-trigger"
+  | "missing-table"
+  | "table-constraint-drift"
+  | "table-definition-drift"
+  | "table-options-drift"
+  | "unexpected-column"
+  | "unexpected-trigger"
+  | "unexpected-unique-index"
+  | "virtual-table-definition-drift";
+
+export type SqliteSchemaIssue = {
+  code: SqliteSchemaIssueCode;
+  message: string;
+  objectName: string;
+};
+
 export type CanonicalSqliteNamedIndexContract = {
   definition: string;
   fingerprint: SqliteIndexContract;
@@ -99,6 +119,34 @@ export type SqliteSchemaCompatibility = {
 const schemaContractCache = new Map<string, SqliteSchemaContract>();
 const TABLE_CONSTRAINT_KEYWORDS = new Set(["CHECK", "FOREIGN", "PRIMARY", "UNIQUE"]);
 
+function defaultIssueMessage(code: SqliteSchemaIssueCode, objectName: string): string {
+  const tableName = objectName.split(".", 1)[0];
+  switch (code) {
+    case "missing-table":
+      return `missing table ${objectName}`;
+    case "missing-column":
+    case "unexpected-column":
+    case "column-definition-drift":
+      return `column definitions differ for ${tableName}`;
+    case "table-constraint-drift":
+      return `table constraints differ for ${objectName}`;
+    case "table-definition-drift":
+      return `table definition differs for ${objectName}`;
+    case "missing-or-drifted-index":
+      return `missing or drifted index ${objectName}`;
+    case "unexpected-unique-index":
+      return `unexpected unique index ${objectName}`;
+    case "missing-or-drifted-trigger":
+      return `missing or drifted trigger ${objectName}`;
+    case "unexpected-trigger":
+      return `unexpected trigger ${objectName}`;
+    case "virtual-table-definition-drift":
+      return `virtual table definition differs for ${objectName}`;
+    case "table-options-drift":
+      return `table options differ for ${objectName}`;
+  }
+}
+
 /**
  * Require every object from one committed schema while allowing unrelated
  * tables and indexes that do not replace a canonical object.
@@ -109,32 +157,71 @@ export function assertSqliteSchemaContains(
   schemaSql: string,
   compatibility: SqliteSchemaCompatibility = {},
 ): void {
+  const issues = collectSqliteSchemaIssues(database, schemaSql, compatibility);
+  if (issues.length > 0) {
+    throwSqliteSchemaMismatches(databaseLabel, legacySqliteSchemaIssueMessages(issues));
+  }
+}
+
+function legacySqliteSchemaIssueMessages(issues: readonly SqliteSchemaIssue[]): string[] {
+  const isColumnIssue = (issue: SqliteSchemaIssue) =>
+    issue.code === "column-definition-drift" ||
+    issue.code === "missing-column" ||
+    issue.code === "unexpected-column";
+  const columnIssueTables = new Set(
+    issues.filter(isColumnIssue).map((issue) => issue.objectName.split(".", 1)[0]),
+  );
+  return [
+    ...new Set(
+      issues
+        .filter(
+          (issue) =>
+            issue.code !== "table-constraint-drift" || !columnIssueTables.has(issue.objectName),
+        )
+        .map((issue) => issue.message),
+    ),
+  ];
+}
+
+/** Collect stable, machine-readable differences from one committed schema. */
+export function collectSqliteSchemaIssues(
+  database: DatabaseSync,
+  schemaSql: string,
+  compatibility: SqliteSchemaCompatibility = {},
+): SqliteSchemaIssue[] {
   const expected = getSqliteSchemaContract(schemaSql);
   const allowedMissingTables = new Set(compatibility.allowedMissingTables ?? []);
 
-  const mismatches: string[] = [];
+  const issues: SqliteSchemaIssue[] = [];
+  const add = (code: SqliteSchemaIssueCode, objectName: string, message?: string) => {
+    issues.push({ code, objectName, message: message ?? defaultIssueMessage(code, objectName) });
+  };
   for (const [tableName, expectedTable] of expected) {
     const actualTable = collectSqliteTableContract(database, tableName);
     if (!actualTable) {
       if (allowedMissingTables.has(tableName)) {
         continue;
       }
-      mismatches.push(`missing table ${tableName}`);
+      add("missing-table", tableName);
       continue;
     }
 
-    const definitionMismatch = compareTableDefinitions(
-      tableName,
-      actualTable.definition,
-      expectedTable.definition,
-      compatibility,
+    issues.push(
+      ...compareTableDefinitions(
+        tableName,
+        actualTable.definition,
+        expectedTable.definition,
+        compatibility,
+      ),
     );
-    if (definitionMismatch) {
-      mismatches.push(`${definitionMismatch} differ for ${tableName}`);
-    }
     for (const expectedIndex of expectedTable.indexes) {
       if (!actualTable.indexes.some((actualIndex) => isEqual(actualIndex, expectedIndex))) {
-        mismatches.push(`missing or drifted index ${expectedIndex.name ?? `on ${tableName}`}`);
+        const objectName = expectedIndex.name ?? tableName;
+        add(
+          "missing-or-drifted-index",
+          objectName,
+          `missing or drifted index ${expectedIndex.name ?? `on ${tableName}`}`,
+        );
       }
     }
     for (const actualIndex of actualTable.indexes) {
@@ -142,7 +229,12 @@ export function assertSqliteSchemaContains(
         actualIndex.unique === 1 &&
         !expectedTable.indexes.some((expectedIndex) => isEqual(actualIndex, expectedIndex))
       ) {
-        mismatches.push(`unexpected unique index ${actualIndex.name ?? `on ${tableName}`}`);
+        const objectName = actualIndex.name ?? tableName;
+        add(
+          "unexpected-unique-index",
+          objectName,
+          `unexpected unique index ${actualIndex.name ?? `on ${tableName}`}`,
+        );
       }
     }
     const optionalCanonicalTriggerGroups = collectOptionalCanonicalTriggerGroups(
@@ -165,7 +257,7 @@ export function assertSqliteSchemaContains(
         continue;
       }
       if (!actualTable.triggers.some((actualTrigger) => isEqual(actualTrigger, expectedTrigger))) {
-        mismatches.push(`missing or drifted trigger ${expectedTrigger.name}`);
+        add("missing-or-drifted-trigger", expectedTrigger.name);
       }
     }
     for (const triggerGroup of optionalCanonicalTriggerGroups) {
@@ -181,7 +273,7 @@ export function assertSqliteSchemaContains(
         if (
           !actualTable.triggers.some((actualTrigger) => isEqual(actualTrigger, canonicalTrigger))
         ) {
-          mismatches.push(`missing or drifted trigger ${canonicalTrigger.name}`);
+          add("missing-or-drifted-trigger", canonicalTrigger.name);
         }
       }
     }
@@ -194,23 +286,20 @@ export function assertSqliteSchemaContains(
           isEqual(actualTrigger, canonicalTrigger),
         )
       ) {
-        mismatches.push(`unexpected trigger ${actualTrigger.name}`);
+        add("unexpected-trigger", actualTrigger.name);
       }
     }
     if (actualTable.virtualTableSql !== expectedTable.virtualTableSql) {
-      mismatches.push(`virtual table definition differs for ${tableName}`);
+      add("virtual-table-definition-drift", tableName);
     }
     if (
       actualTable.strict !== expectedTable.strict ||
       actualTable.withoutRowid !== expectedTable.withoutRowid
     ) {
-      mismatches.push(`table options differ for ${tableName}`);
+      add("table-options-drift", tableName);
     }
   }
-
-  if (mismatches.length > 0) {
-    throwSqliteSchemaMismatches(databaseLabel, mismatches);
-  }
+  return issues;
 }
 
 /** Require stable canonical tables before a version-specific additive migration. */
@@ -436,35 +525,45 @@ function compareTableDefinitions(
   actual: SqliteTableDefinition | null,
   expected: SqliteTableDefinition | null,
   compatibility: SqliteSchemaCompatibility,
-): "column definitions" | "table constraints" | "table definition" | null {
+): SqliteSchemaIssue[] {
+  const issues: SqliteSchemaIssue[] = [];
+  const add = (code: SqliteSchemaIssueCode, objectName: string) => {
+    issues.push({ code, objectName, message: defaultIssueMessage(code, objectName) });
+  };
   if (!actual || !expected) {
-    return actual === expected ? null : "table definition";
+    if (actual !== expected) {
+      add("table-definition-drift", tableName);
+    }
+    return issues;
   }
   const allowedMissingColumns = new Set(compatibility.allowedMissingColumns ?? []);
-  const allowedMissingCount = [...expected.columns].filter(
-    ([columnName]) =>
-      !actual.columns.has(columnName) && allowedMissingColumns.has(`${tableName}.${columnName}`),
-  ).length;
-  if (actual.columns.size + allowedMissingCount !== expected.columns.size) {
-    return "column definitions";
-  }
-  if ([...actual.columns].some(([columnName]) => !expected.columns.has(columnName))) {
-    return "column definitions";
+  for (const columnName of actual.columns.keys()) {
+    if (!expected.columns.has(columnName)) {
+      const objectName = `${tableName}.${columnName}`;
+      add("unexpected-column", objectName);
+    }
   }
   for (const [columnName, expectedDefinition] of expected.columns) {
+    const objectName = `${tableName}.${columnName}`;
     const actualDefinition = actual.columns.get(columnName);
-    if (actualDefinition === undefined && allowedMissingColumns.has(`${tableName}.${columnName}`)) {
+    if (actualDefinition === undefined) {
+      if (!allowedMissingColumns.has(objectName)) {
+        add("missing-column", objectName);
+      }
       continue;
     }
     if (actualDefinition === expectedDefinition) {
       continue;
     }
-    const allowed = compatibility.allowedColumnDefinitions?.[`${tableName}.${columnName}`] ?? [];
+    const allowed = compatibility.allowedColumnDefinitions?.[objectName] ?? [];
     if (!allowed.some((definition) => normalizeSqlWhitespace(definition) === actualDefinition)) {
-      return "column definitions";
+      add("column-definition-drift", objectName);
     }
   }
-  return isEqual(actual.constraints, expected.constraints) ? null : "table constraints";
+  if (!isEqual(actual.constraints, expected.constraints)) {
+    add("table-constraint-drift", tableName);
+  }
+  return issues;
 }
 
 function parseTableDefinition(sql: string | null, tableName: string): SqliteTableDefinition {
