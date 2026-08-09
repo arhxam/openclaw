@@ -143,6 +143,10 @@ describe("qa suite provider selection", () => {
         primaryModel: expect.stringMatching(/^openai\//),
         alternateModel: expect.stringMatching(/^openai\//),
       });
+      expect(summary.run.primaryModel).not.toBe(summary.run.alternateModel);
+      expect([summary.run.primaryModel, summary.run.alternateModel]).toContain(
+        "openai/gpt-5.6-luna",
+      );
     } finally {
       await rm(repoRoot, { recursive: true, force: true });
     }

@@ -2,13 +2,15 @@
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { defaultQaRuntimeModelForMode } = vi.hoisted(() => ({
+const { defaultQaRuntimeModelForMode, resolveQaRuntimeModelPair } = vi.hoisted(() => ({
   defaultQaRuntimeModelForMode:
     vi.fn<(mode: string, options?: { alternate?: boolean }) => string>(),
+  resolveQaRuntimeModelPair: vi.fn(),
 }));
 
 vi.mock("./model-selection.runtime.js", () => ({
   defaultQaRuntimeModelForMode,
+  resolveQaRuntimeModelPair,
 }));
 import { defaultQaModelForMode as defaultQaProviderModelForMode } from "./model-selection.js";
 import {
@@ -28,7 +30,29 @@ import {
   type QaScorecardTaxonomyReport,
 } from "./scorecard-taxonomy.js";
 
-const DEFAULT_LIVE_FRONTIER_MODEL = defaultQaProviderModelForMode("live-frontier");
+function resolveMockQaRuntimeModelPair(params: {
+  providerMode: string;
+  primaryModel?: string;
+  alternateModel?: string;
+  resolveDefaultModel?: (mode: string, alternate?: boolean) => string;
+}) {
+  const resolveDefaultModel =
+    params.resolveDefaultModel ??
+    ((mode: string, alternate = false) =>
+      defaultQaRuntimeModelForMode(mode, alternate ? { alternate: true } : undefined));
+  const primaryModel = params.primaryModel?.trim() || resolveDefaultModel(params.providerMode);
+  const alternateModel =
+    params.alternateModel?.trim() ||
+    (params.providerMode === "live-frontier"
+      ? primaryModel.toLowerCase() === "openai/gpt-5.6-luna"
+        ? "openai/gpt-5.6-sol"
+        : ["openai/gpt-5.6", "openai/gpt-5.6-sol"].includes(primaryModel.toLowerCase())
+          ? "openai/gpt-5.6-luna"
+          : resolveDefaultModel(params.providerMode, true)
+      : resolveDefaultModel(params.providerMode, true));
+  return { primaryModel, alternateModel };
+}
+
 const profiles: QaScorecardTaxonomyReport["profiles"] = [
   {
     id: "smoke-ci",
@@ -92,6 +116,7 @@ describe("qa run config", () => {
       (mode: string, options?: { alternate?: boolean }) =>
         defaultQaProviderModelForMode(mode as QaProviderModeInput, options),
     );
+    resolveQaRuntimeModelPair.mockImplementation(resolveMockQaRuntimeModelPair);
   });
 
   it("creates a canonical smoke-profile request without copying profile membership", () => {
@@ -132,7 +157,7 @@ describe("qa run config", () => {
       evidenceMode: "full",
       providerMode: "live-frontier",
       primaryModel: "openai/gpt-5.6-luna",
-      alternateModel: DEFAULT_LIVE_FRONTIER_MODEL,
+      alternateModel: "openai/gpt-5.6-sol",
       fastMode: true,
       runtimePair: null,
       runtimePairLane: null,
@@ -794,7 +819,7 @@ describe("qa run config", () => {
       evidenceMode: "full",
       providerMode: "live-frontier",
       primaryModel: "openai/gpt-5.6-luna",
-      alternateModel: "openai/gpt-5.6-luna",
+      alternateModel: "openai/gpt-5.6-sol",
       fastMode: true,
       runtimePair: null,
       runtimePairLane: null,

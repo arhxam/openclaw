@@ -18,6 +18,7 @@ const {
   buildQaDockerHarnessImage,
   runQaDockerUp,
   defaultQaRuntimeModelForMode,
+  resolveQaRuntimeModelPair,
   readQaScenarioPack,
 } = vi.hoisted(() => ({
   runQaManualLane: vi.fn(),
@@ -32,6 +33,7 @@ const {
   runQaDockerUp: vi.fn(),
   defaultQaRuntimeModelForMode:
     vi.fn<(mode: string, options?: { alternate?: boolean }) => string>(),
+  resolveQaRuntimeModelPair: vi.fn(),
   readQaScenarioPack: vi.fn<() => QaScenarioPack>(),
 }));
 
@@ -76,6 +78,7 @@ vi.mock("./docker-up.runtime.js", () => ({
 
 vi.mock("./model-selection.runtime.js", () => ({
   defaultQaRuntimeModelForMode,
+  resolveQaRuntimeModelPair,
 }));
 
 vi.mock("./scenario-catalog.js", async (importOriginal) => {
@@ -112,6 +115,25 @@ import { expandQaScenarioExecutionCells } from "./scenario-lane.js";
 import type { QaSuiteRunParams } from "./suite.js";
 
 const DEFAULT_LIVE_FRONTIER_MODEL = defaultQaProviderModelForMode("live-frontier");
+function resolveMockQaRuntimeModelPair(params: {
+  providerMode: string;
+  primaryModel?: string;
+  alternateModel?: string;
+}) {
+  const primaryModel =
+    params.primaryModel?.trim() || defaultQaRuntimeModelForMode(params.providerMode);
+  const alternateModel =
+    params.alternateModel?.trim() ||
+    (params.providerMode === "live-frontier"
+      ? primaryModel.toLowerCase() === "openai/gpt-5.6-luna"
+        ? "openai/gpt-5.6-sol"
+        : ["openai/gpt-5.6", "openai/gpt-5.6-sol"].includes(primaryModel.toLowerCase())
+          ? "openai/gpt-5.6-luna"
+          : defaultQaRuntimeModelForMode(params.providerMode, { alternate: true })
+      : defaultQaRuntimeModelForMode(params.providerMode, { alternate: true }));
+  return { primaryModel, alternateModel };
+}
+
 const QA_PASSING_SUITE_SCENARIO = {
   name: "channel chat baseline",
   status: "pass" as const,
@@ -340,6 +362,7 @@ describe("qa cli runtime", () => {
       (mode: string, options?: { alternate?: boolean }) =>
         defaultQaProviderModelForMode(mode as QaProviderModeInput, options),
     );
+    resolveQaRuntimeModelPair.mockImplementation(resolveMockQaRuntimeModelPair);
     readQaScenarioPack.mockClear();
     runQaSuite.mockImplementation(async (params) => {
       const observedCells = executionCellsForSuiteParams(params);
@@ -3262,14 +3285,14 @@ describe("qa cli runtime", () => {
       transportId: "qa-channel",
       providerMode: "live-frontier",
       primaryModel: DEFAULT_LIVE_FRONTIER_MODEL,
-      alternateModel: DEFAULT_LIVE_FRONTIER_MODEL,
+      alternateModel: "openai/gpt-5.6-luna",
       fastMode: undefined,
       message: "read qa kickoff and reply short",
       timeoutMs: undefined,
     });
   });
 
-  it("keeps an explicit manual primary model as the alternate default", async () => {
+  it("resolves an omitted manual alternate after the explicit primary", async () => {
     await runQaManualLaneCommand({
       repoRoot: "/tmp/openclaw-repo",
       providerMode: "live-frontier",
@@ -3282,7 +3305,7 @@ describe("qa cli runtime", () => {
       transportId: "qa-channel",
       providerMode: "live-frontier",
       primaryModel: "anthropic/claude-sonnet-4-6",
-      alternateModel: "anthropic/claude-sonnet-4-6",
+      alternateModel: DEFAULT_LIVE_FRONTIER_MODEL,
       fastMode: undefined,
       message: "read qa kickoff and reply short",
       timeoutMs: undefined,
@@ -3306,7 +3329,7 @@ describe("qa cli runtime", () => {
       transportId: "qa-channel",
       providerMode: "live-frontier",
       primaryModel: "openai/gpt-5.6-luna",
-      alternateModel: "openai/gpt-5.6-luna",
+      alternateModel: "openai/gpt-5.6-sol",
       fastMode: undefined,
       message: "read qa kickoff and reply short",
       timeoutMs: undefined,
