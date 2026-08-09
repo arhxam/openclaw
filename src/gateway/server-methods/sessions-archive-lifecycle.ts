@@ -27,6 +27,7 @@ import {
 } from "../worker-environments/inference-control-internal.js";
 import { asWorkerInferenceControl } from "../worker-environments/inference-control.js";
 import type { WorkerSessionPlacementStore } from "../worker-environments/placement-store.js";
+import { prepareSessionWorkerPlacementForArchive } from "../worker-environments/session-placement-lifecycle.js";
 import {
   abortChatRunsForSessionKeyWithPartials,
   createChatAbortOps,
@@ -56,7 +57,8 @@ type SessionArchiveLifecycleParams = {
   storePath: string;
   sessionKeys: string[];
   sessionId?: string;
-  agentId?: string;
+  agentId: string;
+  sessionKey: string;
   defaultAgentId: string;
   lifecycleIdentities: string[];
 };
@@ -100,6 +102,8 @@ function hasAuthoritativeSessionWork(
 export async function prepareSessionArchiveLifecycle(
   params: SessionArchiveLifecycleParams,
 ): Promise<SessionArchiveLifecycleDrain> {
+  // Reject transient/live-failed placement before archive cancellation has side effects.
+  await prepareSessionWorkerPlacementForArchive({ ...params, reclaimActive: false });
   const timeoutMs = SESSION_WORK_ADMISSION_DRAIN_TIMEOUT_MS;
   const workIdentities = Array.from(
     new Set([...params.sessionKeys, ...(params.sessionId ? [params.sessionId] : [])]),
@@ -196,6 +200,8 @@ export async function prepareSessionArchiveLifecycle(
     if (!drains.every(Boolean)) {
       throw new Error("Session work did not fully drain before archive");
     }
+    // Fresh exact placement must be reclaimed before archivedAt can commit.
+    await prepareSessionWorkerPlacementForArchive({ ...params, reclaimActive: true });
     return {
       release: () => workerDrain?.release(),
       hasAuthoritativeWork: () => hasAuthoritativeSessionWork(params, workerDrain, workIdentities),

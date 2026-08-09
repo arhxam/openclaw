@@ -212,7 +212,8 @@ export async function prepareSessionPatchArchive(params: {
         ]),
       ),
       sessionId: fresh.entry?.sessionId,
-      agentId: target.requestedAgentId,
+      sessionKey: freshCanonicalKey,
+      agentId: freshResolved.agentId,
       defaultAgentId: resolveDefaultAgentId(cfg),
       lifecycleIdentities: target.lifecycleIdentities.filter((identity): identity is string =>
         Boolean(identity),

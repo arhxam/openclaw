@@ -6,6 +6,7 @@ import { onAgentEvent } from "../infra/agent-events.js";
 import {
   beginSessionWorkAdmission,
   isSessionLifecycleMutationActive,
+  runExclusiveSessionLifecycleMutation,
 } from "../sessions/session-lifecycle-admission.js";
 import { closeOpenClawStateDatabaseForTest } from "../state/openclaw-state-db.js";
 import { markChatAbortTerminalPersistenceError } from "./chat-abort-lifecycle-internal.js";
@@ -27,6 +28,7 @@ import {
   setupGatewaySessionsHandlerTestHarness,
 } from "./test/server-sessions.test-helpers.js";
 import { registerWorkerInferenceSessionDrain } from "./worker-environments/inference-control-internal.js";
+import type { WorkerSessionPlacementRecord } from "./worker-environments/placement-record.js";
 
 const sessionAuditGate = vi.hoisted(() => ({
   entered: vi.fn(),
@@ -142,6 +144,71 @@ function identifiedClient(profileId: string): GatewayClient {
       },
       role: "operator",
       scopes: ["operator.read", "operator.write"],
+    },
+  };
+}
+
+function workerPlacement(params: {
+  sessionId: string;
+  sessionKey: string;
+  state: WorkerSessionPlacementRecord["state"];
+  agentId?: string;
+  environmentId?: string | null;
+}): WorkerSessionPlacementRecord {
+  return {
+    sessionId: params.sessionId,
+    sessionKey: params.sessionKey,
+    agentId: params.agentId ?? "main",
+    state: params.state,
+    generation: 2,
+    turnClaim: null,
+    createdAtMs: 1,
+    updatedAtMs: 2,
+    stateChangedAtMs: 2,
+    environmentId:
+      params.environmentId !== undefined
+        ? params.environmentId
+        : params.state === "local" || params.state === "requested"
+          ? null
+          : "worker-environment",
+    activeOwnerEpoch: ["active", "draining", "reconciling", "reclaimed", "failed"].includes(
+      params.state,
+    )
+      ? 1
+      : null,
+    workspaceBaseManifestRef:
+      params.state === "local" ||
+      params.state === "requested" ||
+      params.state === "provisioning" ||
+      params.state === "syncing"
+        ? null
+        : "manifest-ref",
+    remoteWorkspaceDir:
+      params.state === "local" ||
+      params.state === "requested" ||
+      params.state === "provisioning" ||
+      params.state === "syncing"
+        ? null
+        : "/workspace",
+    workerBundleHash:
+      params.state === "local" || params.state === "requested" || params.state === "provisioning"
+        ? null
+        : "bundle-hash",
+    lastTranscriptAckCursor: null,
+    lastLiveEventAckCursor: null,
+    recoveryError: params.state === "failed" ? "worker recovery stopped" : null,
+  } as WorkerSessionPlacementRecord;
+}
+
+function placementReader(current: () => WorkerSessionPlacementRecord | undefined) {
+  return {
+    getMany(sessionIds: readonly string[]) {
+      const placement = current();
+      return new Map(
+        placement && sessionIds.includes(placement.sessionId)
+          ? [[placement.sessionId, placement]]
+          : [],
+      );
     },
   };
 }
@@ -321,6 +388,10 @@ test("sharing revocation fences archive before cancellation and forces fresh aut
   const persistence = createDeferred<void>();
   const active = activeRunContext({ runId, sessionId, sessionKey, persistence });
   const requestContext = await archiveLifecycleRequestContext(active.context);
+  const placement = workerPlacement({ sessionId, sessionKey, state: "active" });
+  const reclaim = vi.fn();
+  requestContext.workerSessionPlacementService = placementReader(() => placement);
+  requestContext.workerPlacementDispatchService = { dispatch: vi.fn(), reclaim };
   const authorized = resolveSessionMutationAuthorization({
     client: viewer,
     method: "sessions.patch",
@@ -378,6 +449,7 @@ test("sharing revocation fences archive before cancellation and forces fresh aut
     expect(interrupted).toBe(false);
     expect(active.controller.signal.aborted).toBe(false);
     expectNoSessionQueueCleanup();
+    expect(reclaim).not.toHaveBeenCalled();
     expect(loadSessionEntry({ storePath, sessionKey })?.archivedAt).toBeUndefined();
 
     releaseAudit.resolve();
@@ -423,6 +495,15 @@ test("archive retains the lifecycle fence until drain and commit before sharing 
   const persistence = createDeferred<void>();
   const active = activeRunContext({ runId, sessionId, sessionKey, persistence });
   const requestContext = await archiveLifecycleRequestContext(active.context);
+  let placement = workerPlacement({ sessionId, sessionKey, state: "active" });
+  const reclaimGate = createDeferred<void>();
+  const reclaim = vi.fn(async () => {
+    await reclaimGate.promise;
+    placement = workerPlacement({ sessionId, sessionKey, state: "reclaimed" });
+    return placement as Extract<WorkerSessionPlacementRecord, { state: "reclaimed" }>;
+  });
+  requestContext.workerSessionPlacementService = placementReader(() => placement);
+  requestContext.workerPlacementDispatchService = { dispatch: vi.fn(), reclaim };
   const authorized = resolveSessionMutationAuthorization({
     client: owner,
     method: "sessions.patch",
@@ -461,6 +542,10 @@ test("archive retains the lifecycle fence until drain and commit before sharing 
 
     admission.release();
     persistence.resolve();
+    await vi.waitFor(() => expect(reclaim).toHaveBeenCalledOnce());
+    expect(sharingSettled).toBe(false);
+    expect(loadSessionEntry({ storePath, sessionKey })?.archivedAt).toBeUndefined();
+    reclaimGate.resolve();
     expect(await archive).toMatchObject({ ok: true });
     expect(loadSessionEntry({ storePath, sessionKey })?.archivedAt).toEqual(expect.any(Number));
     expect(await sharing).toMatchObject({ ok: true });
@@ -471,8 +556,73 @@ test("archive retains the lifecycle fence until drain and commit before sharing 
   } finally {
     admission.release();
     persistence.resolve();
+    reclaimGate.resolve();
     await Promise.allSettled([...(archive ? [archive] : []), ...(sharing ? [sharing] : [])]);
     active.unsubscribe();
+  }
+});
+
+test("alias archive lets the canonical cloud reclaim barrier reenter without deadlock", async () => {
+  const { storePath } = await createSessionStoreDir();
+  const aliasKey = "aaa-archive-cloud-alias";
+  const sessionKey = `agent:main:${aliasKey}`;
+  const sessionId = "session-archive-cloud-alias";
+  await writeSessionStore({ entries: { [sessionKey]: sessionStoreEntry(sessionId) } });
+  let placement = workerPlacement({ sessionId, sessionKey, state: "active" });
+  const reclaimEntered = createDeferred<void>();
+  const allowNestedReclaim = createDeferred<void>();
+  const contenderRelease = createDeferred<void>();
+  const reclaim = vi.fn(async () => {
+    reclaimEntered.resolve();
+    await allowNestedReclaim.promise;
+    await runExclusiveSessionLifecycleMutation({
+      scope: storePath,
+      identities: [aliasKey, sessionKey, sessionId],
+      run: async () => {},
+    });
+    placement = workerPlacement({ sessionId, sessionKey, state: "reclaimed" });
+    return placement as Extract<WorkerSessionPlacementRecord, { state: "reclaimed" }>;
+  });
+  const archive = directSessionReq(
+    "sessions.patch",
+    { key: aliasKey, archived: true },
+    {
+      context: {
+        workerSessionPlacementService: placementReader(() => placement),
+        workerPlacementDispatchService: { dispatch: vi.fn(), reclaim },
+      },
+    },
+  );
+  await reclaimEntered.promise;
+  const contender = runExclusiveSessionLifecycleMutation({
+    scope: storePath,
+    identities: [aliasKey],
+    run: async () => await contenderRelease.promise,
+  });
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
+  allowNestedReclaim.resolve();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    const result = await Promise.race([
+      archive,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("nested alias reclaim deadlocked")), 2_000);
+      }),
+    ]);
+    expect(result.ok).toBe(true);
+    expect(reclaim).toHaveBeenCalledOnce();
+    expect(placement.state).toBe("reclaimed");
+    expect(loadSessionEntry({ storePath, sessionKey })?.archivedAt).toEqual(expect.any(Number));
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+    contenderRelease.resolve();
+    allowNestedReclaim.resolve();
+    await Promise.allSettled([archive, contender]);
   }
 });
 
@@ -864,12 +1014,22 @@ test("sessions.patch rejects a generation replaced after the exact preparation r
   await writeSessionStore({ entries: { [sessionKey]: sessionStoreEntry(sessionId) } });
   const persistence = createDeferred<void>();
   const active = activeRunContext({ runId, sessionId, sessionKey, persistence });
+  let placement = workerPlacement({ sessionId, sessionKey, state: "active" });
+  const dispatch = vi.fn();
+  const reclaim = vi.fn(async () => {
+    placement = workerPlacement({ sessionId, sessionKey, state: "reclaimed" });
+    return placement as Extract<WorkerSessionPlacementRecord, { state: "reclaimed" }>;
+  });
   try {
     const archive = directSessionReq(
       "sessions.patch",
       { key: sessionKey, archived: true },
       {
-        context: active.context,
+        context: {
+          ...active.context,
+          workerSessionPlacementService: placementReader(() => placement),
+          workerPlacementDispatchService: { dispatch, reclaim },
+        },
       },
     );
     await vi.waitFor(() => expect(active.controller.signal.aborted).toBe(true));
@@ -886,6 +1046,9 @@ test("sessions.patch rejects a generation replaced after the exact preparation r
       sessionId: "session-archive-generation-replacement",
     });
     expect(loadSessionEntry({ storePath, sessionKey })?.archivedAt).toBeUndefined();
+    expect(reclaim).toHaveBeenCalledOnce();
+    expect(placement.state).toBe("reclaimed");
+    expect(dispatch).not.toHaveBeenCalled();
   } finally {
     active.unsubscribe();
   }

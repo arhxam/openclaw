@@ -1,3 +1,4 @@
+import { SESSION_ARCHIVE_REQUEST_OPTIONS } from "../../../../src/shared/session-archive-timeout.ts";
 import type {
   SessionBranch,
   SessionsBranchesListResult,
@@ -134,10 +135,11 @@ export function requestSessionPatch(
   patch: SessionPatch,
   options: { agentId?: string | null } = {},
 ): Promise<SessionsPatchResult> {
-  return client.request<SessionsPatchResult>("sessions.patch", {
-    ...buildSessionRequestParams(key, options.agentId),
-    ...patch,
-  });
+  return client.request<SessionsPatchResult>(
+    "sessions.patch",
+    { ...buildSessionRequestParams(key, options.agentId), ...patch },
+    patch.archived === true ? SESSION_ARCHIVE_REQUEST_OPTIONS : undefined,
+  );
 }
 
 export function requestSessionDelete(
