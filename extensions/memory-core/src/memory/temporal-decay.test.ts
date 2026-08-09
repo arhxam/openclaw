@@ -122,6 +122,24 @@ describe("temporal decay", () => {
     expect(byPath.get("memory/2000-01-01.md")?.score ?? 1).toBeLessThan(0.001);
   });
 
+  it("decays valid dated files nested under memory while keeping other nested notes evergreen", async () => {
+    const decayed = await applyTemporalDecayToHybridResults({
+      results: [
+        { path: "memory/dreaming/light/2026-01-11.md", score: 1, source: "memory" },
+        { path: "memory\\dreaming\\deep\\2026-01-11.md", score: 0.8, source: "memory" },
+        { path: "memory/dreaming/light/notes.md", score: 0.7, source: "memory" },
+        { path: "memory/dreaming/light/2026-02-30.md", score: 0.6, source: "memory" },
+      ],
+      temporalDecay: { enabled: true, halfLifeDays: 30 },
+      nowMs: NOW_MS,
+    });
+
+    expect(decayed[0]?.score).toBeCloseTo(0.5, 2);
+    expect(decayed[1]?.score).toBeCloseTo(0.4, 2);
+    expect(decayed[2]?.score).toBeCloseTo(0.7);
+    expect(decayed[3]?.score).toBeCloseTo(0.6);
+  });
+
   it("uses file mtime fallback for non-memory sources", async () => {
     const dir = await createTempWorkspace("openclaw-temporal-decay-");
     const sessionPath = path.join(dir, "sessions", "thread.jsonl");

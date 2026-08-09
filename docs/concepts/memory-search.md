@@ -139,7 +139,8 @@ Two optional features help with a large note history.
 Old notes gradually lose ranking weight so recent information surfaces first.
 With the default 30-day half-life, a note from last month scores at 50% of its
 original weight. `MEMORY.md` and other non-dated files under `memory/` are
-evergreen and never decayed; only dated `memory/YYYY-MM-DD.md` files decay.
+evergreen and never decayed; dated `YYYY-MM-DD.md` files anywhere under
+`memory/` decay.
 
 ### MMR (diversity)
 
