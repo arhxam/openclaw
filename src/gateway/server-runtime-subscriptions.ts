@@ -157,6 +157,7 @@ export function startGatewayEventSubscriptions(params: {
                   entry.projectSessionActive = false;
                   entry.projectSessionTerminalPending = false;
                   entry.projectSessionTerminalPersisted = false;
+                  entry.projectSessionTerminalPersistenceError = undefined;
                   queueMicrotask(() => {
                     const current = params.chatAbortControllers.get(candidateRunId);
                     if (
@@ -183,6 +184,7 @@ export function startGatewayEventSubscriptions(params: {
                   entry.projectSessionTerminalPending = false;
                   entry.projectSessionTerminalPersisted = true;
                   entry.projectSessionTerminalPersistence = undefined;
+                  entry.projectSessionTerminalPersistenceError = undefined;
                 }
               }
             },
@@ -199,6 +201,9 @@ export function startGatewayEventSubscriptions(params: {
                 if (entry) {
                   entry.projectSessionTerminalPending = false;
                   entry.projectSessionTerminalPersistence = persistence;
+                  void persistence.catch((error: unknown) => {
+                    entry.projectSessionTerminalPersistenceError = error;
+                  });
                   if (entry.registrationCleanupRequested === true) {
                     void persistence
                       .catch(() => undefined)
