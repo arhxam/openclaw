@@ -17,6 +17,7 @@ import {
   normalizeForwardedContext,
   type TelegramThreadSpec,
 } from "./bot/helpers.js";
+import type { TelegramMediaUnavailableReason } from "./bot/types.js";
 import {
   isTelegramMessageCacheSourceMessage,
   parseTelegramResolvedMedia,
@@ -38,6 +39,7 @@ import { getOptionalTelegramRuntime } from "./runtime.js";
 
 export type TelegramReplyChainEntry = NonNullable<MsgContext["ReplyChain"]>[number] & {
   mediaKind?: TelegramMediaKind;
+  mediaUnavailableReason?: TelegramMediaUnavailableReason;
 };
 
 export type TelegramCachedMessageNode = Omit<TelegramReplyChainEntry, "messageId"> & {

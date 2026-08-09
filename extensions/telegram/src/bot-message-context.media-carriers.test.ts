@@ -172,7 +172,7 @@ describe("buildTelegramMessageContext media carriers", () => {
     expect([...groupHistories.values()].flat().at(-1)?.body).toBe("<media:image>");
   });
 
-  it("admits an unavailable native sticker as a type-only fact", async () => {
+  it("explains an unavailable animated sticker without inventing a staged path", async () => {
     const context = await buildTelegramMessageContextForTest({
       message: {
         chat: { id: 42, type: "private", first_name: "Ada" },
@@ -187,12 +187,15 @@ describe("buildTelegramMessageContext media carriers", () => {
           is_video: false,
         },
       },
-      allMedia: [{ kind: "sticker" }],
+      allMedia: [{ kind: "sticker", unavailableReason: "animated-sticker" }],
     });
 
     expect(context?.ctxPayload.RawBody).toBe("");
-    expect(context?.ctxPayload.BodyForAgent).toBe("");
+    expect(context?.ctxPayload.BodyForAgent).toContain(
+      "OpenClaw did not stage or analyze this animated Telegram sticker",
+    );
     expect(context?.ctxPayload.media?.map((fact) => fact.kind)).toEqual(["sticker"]);
+    expect(context?.ctxPayload.media?.[0]?.path).toBeUndefined();
     expect(context?.ctxPayload.StickerMediaIncluded).toBeUndefined();
   });
 

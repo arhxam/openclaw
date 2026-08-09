@@ -172,6 +172,7 @@ describe("telegram stickers", () => {
         {
           messageId: 101,
           filePath: "stickers/animated.tgs",
+          unavailableReason: "animated-sticker",
           sticker: {
             file_id: "animated_sticker_id",
             file_unique_id: "animated_unique",
@@ -187,6 +188,7 @@ describe("telegram stickers", () => {
         {
           messageId: 102,
           filePath: "stickers/video.webm",
+          unavailableReason: "video-sticker",
           sticker: {
             file_id: "video_sticker_id",
             file_unique_id: "video_unique",
@@ -223,7 +225,10 @@ describe("telegram stickers", () => {
           } as unknown as TelegramContext,
         });
 
-        expect(media).toBeNull();
+        expect(media).toEqual({
+          kind: "sticker",
+          unavailableReason: scenario.unavailableReason,
+        });
         expect(getFile).not.toHaveBeenCalled();
         expect(proxyFetch).not.toHaveBeenCalled();
       }

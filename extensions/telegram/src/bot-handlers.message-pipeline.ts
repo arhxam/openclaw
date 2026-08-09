@@ -335,17 +335,20 @@ export function createTelegramMessagePipeline({
             });
             if (media) {
               mediaRef = {
-                path: media.path,
+                ...(media.path ? { path: media.path } : {}),
                 kind: media.kind,
                 ...(media.contentType ? { contentType: media.contentType } : {}),
                 ...(media.stickerMetadata ? { stickerMetadata: media.stickerMetadata } : {}),
+                ...(media.unavailableReason ? { unavailableReason: media.unavailableReason } : {}),
               };
-              await recordReplyMessageResolvedMedia({
-                chatId: ctx.message.chat.id,
-                messageId: node.messageId,
-                media,
-                botUserId: ctx.me?.id,
-              });
+              if (media.path) {
+                await recordReplyMessageResolvedMedia({
+                  chatId: ctx.message.chat.id,
+                  messageId: node.messageId,
+                  media,
+                  botUserId: ctx.me?.id,
+                });
+              }
             }
           }
         } catch (err) {

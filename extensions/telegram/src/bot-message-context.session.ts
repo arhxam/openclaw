@@ -27,6 +27,7 @@ import { normalizeOptionalLowercaseString } from "openclaw/plugin-sdk/string-coe
 import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
 import type { NormalizedAllowFrom } from "./bot-access.js";
 import { isSenderAllowed, normalizeAllowFrom } from "./bot-access.js";
+import { formatTelegramUnavailableStickerNotice } from "./bot-message-context.body.js";
 import type {
   TelegramMediaRef,
   TelegramMessageContextOptions,
@@ -627,10 +628,22 @@ export async function buildTelegramInboundContextPayload(params: {
   const replyTargetMedia =
     replyHeadMedia ??
     (visibleReplyTarget?.mediaType ? { kind: visibleReplyTarget.mediaType } : undefined);
-  const replyBody =
+  const replyBodyBase =
     replyHead?.body ??
     visibleReplyTarget?.body ??
     (replyTargetMedia ? formatMediaPlaceholderText([replyTargetMedia]) : undefined);
+  const replyUnavailableReason =
+    replyHead?.mediaUnavailableReason ??
+    (visibleReplyChain.length === 0
+      ? replyMedia.find((media) => media.unavailableReason)?.unavailableReason
+      : undefined);
+  const replyUnavailableNotice = replyUnavailableReason
+    ? formatTelegramUnavailableStickerNotice(replyUnavailableReason)
+    : undefined;
+  const replyBody =
+    replyUnavailableNotice || replyBodyBase
+      ? [replyBodyBase, replyUnavailableNotice].filter(Boolean).join("\n")
+      : undefined;
   const telegramFrom = isGroup ? buildTelegramGroupFrom(chatId, threadSpec) : `telegram:${chatId}`;
   const telegramTo = buildTelegramInboundOriginTarget(chatId, threadSpec);
   const locationContext = locationData ? toLocationContext(locationData) : undefined;

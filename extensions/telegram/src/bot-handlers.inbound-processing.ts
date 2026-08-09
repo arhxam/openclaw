@@ -316,7 +316,7 @@ export function createTelegramInboundProcessing({
       ? [
           media
             ? {
-                path: media.path,
+                ...(media.path ? { path: media.path } : {}),
                 contentType: media.contentType,
                 kind: media.kind,
                 stickerMetadata: media.stickerMetadata,

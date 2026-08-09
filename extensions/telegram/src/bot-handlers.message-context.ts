@@ -19,6 +19,7 @@ import type {
   TelegramMessageContextOptions,
   TelegramPromptContextEntry,
 } from "./bot-message-context.types.js";
+import { formatTelegramUnavailableStickerNotice } from "./bot-message-context.body.js";
 import {
   buildSenderName,
   getTelegramTextParts,
@@ -398,15 +399,16 @@ export function createTelegramMessageContextRuntime({
       ...entry
     } = node;
     const projectedEntry = { ...entry, sender: resolvePromptSender(node, ctx) };
-    if (!media?.path) {
+    if (!media?.path && !media?.unavailableReason) {
       return projectedEntry;
     }
     const { mediaRef: _mediaRef, ...entryWithoutProviderMediaRef } = projectedEntry;
     return {
       ...entryWithoutProviderMediaRef,
-      mediaPath: media.path,
+      ...(media.path ? { mediaPath: media.path } : {}),
       mediaKind: media.kind,
       ...(media.contentType ? { mediaType: media.contentType } : {}),
+      ...(media.unavailableReason ? { mediaUnavailableReason: media.unavailableReason } : {}),
     };
   };
 
@@ -415,20 +417,26 @@ export function createTelegramMessageContextRuntime({
     ctx: TelegramContext,
     flags?: { replyTarget?: boolean },
     media?: TelegramMediaRef,
-  ) => ({
-    message_id: node.messageId,
-    thread_id: node.threadId,
-    sender: resolvePromptSender(node, ctx),
-    sender_id: node.senderId,
-    sender_username: node.senderUsername,
-    timestamp_ms: node.timestamp,
-    body: node.body,
-    media_type: media?.contentType ?? media?.kind ?? node.mediaType,
-    media_path: media?.path,
-    media_ref: media?.path ? undefined : node.mediaRef,
-    reply_to_id: node.replyToId,
-    is_reply_target: flags?.replyTarget === true ? true : undefined,
-  });
+  ) => {
+    const unavailableNotice = media?.unavailableReason
+      ? formatTelegramUnavailableStickerNotice(media.unavailableReason)
+      : undefined;
+    const body = [node.body, unavailableNotice].filter(Boolean).join("\n");
+    return {
+      message_id: node.messageId,
+      thread_id: node.threadId,
+      sender: resolvePromptSender(node, ctx),
+      sender_id: node.senderId,
+      sender_username: node.senderUsername,
+      timestamp_ms: node.timestamp,
+      body: body || undefined,
+      media_type: media?.contentType ?? media?.kind ?? node.mediaType,
+      media_path: media?.path,
+      media_ref: media?.path || media?.unavailableReason ? undefined : node.mediaRef,
+      reply_to_id: node.replyToId,
+      is_reply_target: flags?.replyTarget === true ? true : undefined,
+    };
+  };
 
   const buildPromptContextForMessage = async (
     ctx: TelegramContext,
