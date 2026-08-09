@@ -26,8 +26,11 @@ function readUiCss(): string {
     "ui/src/styles/config.css",
     "ui/src/styles/settings.css",
     "ui/src/styles/layout.css",
+    "ui/src/styles/layout.mobile.css",
     "ui/src/styles/usage.css",
     "ui/src/styles/chat/layout.css",
+    "ui/src/styles/chat/sidebar.css",
+    "ui/src/styles/sidebar-markdown.css",
   ];
   return files.map((file) => readStyleSheet(file)).join("\n");
 }
@@ -352,6 +355,60 @@ describeBrowserLayout("mount fallback cursor", () => {
 });
 
 describeBrowserLayout("app chrome interaction styles", () => {
+  it("scales sidebar typography with the Control UI text-size preference", async () => {
+    const page = await desktopContext.newPage();
+    try {
+      await page.setViewportSize({ width: 1200, height: 800 });
+      await page.setContent(`
+        <!doctype html>
+        <html>
+          <head><style>${readUiCss()}</style></head>
+          <body>
+            <span class="nav-item__text">Navigation</span>
+            <span class="sidebar-recent-session__name">Recent session</span>
+            <span class="sidebar-agent-card__name">Agent</span>
+            <span class="settings-sidebar__item-label">Settings</span>
+            <span class="sidebar-file-view__path">workspace/file.ts</span>
+            <article class="sidebar-markdown"><pre><code>const scaled = true;</code></pre></article>
+          </body>
+        </html>
+      `);
+
+      const selectors = [
+        ".nav-item__text",
+        ".sidebar-recent-session__name",
+        ".sidebar-agent-card__name",
+        ".settings-sidebar__item-label",
+        ".sidebar-file-view__path",
+        ".sidebar-markdown pre code",
+      ];
+      const readFontSizes = () =>
+        page.evaluate((targets) => {
+          return Object.fromEntries(
+            targets.map((selector) => {
+              const node = document.querySelector(selector);
+              if (!(node instanceof HTMLElement)) {
+                throw new Error(`Missing sidebar typography fixture ${selector}`);
+              }
+              return [selector, Number.parseFloat(getComputedStyle(node).fontSize)];
+            }),
+          );
+        }, selectors);
+
+      const baseline = await readFontSizes();
+      await page.evaluate(() => {
+        document.documentElement.style.setProperty("--control-ui-text-scale", "1.4");
+      });
+      const scaled = await readFontSizes();
+
+      for (const selector of selectors) {
+        expect(scaled[selector], selector).toBeCloseTo(baseline[selector] * 1.4, 1);
+      }
+    } finally {
+      await page.close().catch(() => {});
+    }
+  });
+
   it("keeps sidebars compact while preserving normal content scroll and text entry", async () => {
     const page = await desktopContext.newPage();
     try {
