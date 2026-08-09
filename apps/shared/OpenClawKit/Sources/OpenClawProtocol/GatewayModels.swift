@@ -50,6 +50,11 @@ public enum EnvironmentStatus: String, Codable, Sendable {
     case error = "error"
 }
 
+public enum EnvironmentTrust: String, Codable, Sendable {
+    case persistent = "persistent"
+    case disposable = "disposable"
+}
+
 public enum WorkerEnvironmentState: String, Codable, Sendable {
     case requested = "requested"
     case provisioning = "provisioning"
@@ -1841,6 +1846,9 @@ public struct EnvironmentSummary: Codable, Sendable {
     public let type: String
     public let label: String?
     public let status: EnvironmentStatus
+    public let trust: EnvironmentTrust?
+    public let sessionhost: Bool?
+    public let platform: String?
     public let capabilities: [String]?
     public let worker: WorkerEnvironmentMetadata?
 
@@ -1849,6 +1857,9 @@ public struct EnvironmentSummary: Codable, Sendable {
         type: String,
         label: String? = nil,
         status: EnvironmentStatus,
+        trust: EnvironmentTrust? = nil,
+        sessionhost: Bool? = nil,
+        platform: String? = nil,
         capabilities: [String]? = nil,
         worker: WorkerEnvironmentMetadata? = nil)
     {
@@ -1856,6 +1867,9 @@ public struct EnvironmentSummary: Codable, Sendable {
         self.type = type
         self.label = label
         self.status = status
+        self.trust = trust
+        self.sessionhost = sessionhost
+        self.platform = platform
         self.capabilities = capabilities
         self.worker = worker
     }
@@ -1865,6 +1879,9 @@ public struct EnvironmentSummary: Codable, Sendable {
         case type
         case label
         case status
+        case trust
+        case sessionhost = "sessionHost"
+        case platform
         case capabilities
         case worker
     }
@@ -1893,6 +1910,9 @@ public struct EnvironmentsCreateResult: Codable, Sendable {
     public let type: String
     public let label: String?
     public let status: EnvironmentStatus
+    public let trust: EnvironmentTrust?
+    public let sessionhost: Bool?
+    public let platform: String?
     public let capabilities: [String]?
     public let worker: WorkerEnvironmentMetadata?
 
@@ -1901,6 +1921,9 @@ public struct EnvironmentsCreateResult: Codable, Sendable {
         type: String,
         label: String? = nil,
         status: EnvironmentStatus,
+        trust: EnvironmentTrust? = nil,
+        sessionhost: Bool? = nil,
+        platform: String? = nil,
         capabilities: [String]? = nil,
         worker: WorkerEnvironmentMetadata? = nil)
     {
@@ -1908,6 +1931,9 @@ public struct EnvironmentsCreateResult: Codable, Sendable {
         self.type = type
         self.label = label
         self.status = status
+        self.trust = trust
+        self.sessionhost = sessionhost
+        self.platform = platform
         self.capabilities = capabilities
         self.worker = worker
     }
@@ -1917,6 +1943,9 @@ public struct EnvironmentsCreateResult: Codable, Sendable {
         case type
         case label
         case status
+        case trust
+        case sessionhost = "sessionHost"
+        case platform
         case capabilities
         case worker
     }
@@ -1945,6 +1974,9 @@ public struct EnvironmentsDestroyResult: Codable, Sendable {
     public let type: String
     public let label: String?
     public let status: EnvironmentStatus
+    public let trust: EnvironmentTrust?
+    public let sessionhost: Bool?
+    public let platform: String?
     public let capabilities: [String]?
     public let worker: WorkerEnvironmentMetadata?
 
@@ -1953,6 +1985,9 @@ public struct EnvironmentsDestroyResult: Codable, Sendable {
         type: String,
         label: String? = nil,
         status: EnvironmentStatus,
+        trust: EnvironmentTrust? = nil,
+        sessionhost: Bool? = nil,
+        platform: String? = nil,
         capabilities: [String]? = nil,
         worker: WorkerEnvironmentMetadata? = nil)
     {
@@ -1960,6 +1995,9 @@ public struct EnvironmentsDestroyResult: Codable, Sendable {
         self.type = type
         self.label = label
         self.status = status
+        self.trust = trust
+        self.sessionhost = sessionhost
+        self.platform = platform
         self.capabilities = capabilities
         self.worker = worker
     }
@@ -1969,6 +2007,9 @@ public struct EnvironmentsDestroyResult: Codable, Sendable {
         case type
         case label
         case status
+        case trust
+        case sessionhost = "sessionHost"
+        case platform
         case capabilities
         case worker
     }
@@ -2013,6 +2054,9 @@ public struct EnvironmentsStatusResult: Codable, Sendable {
     public let type: String
     public let label: String?
     public let status: EnvironmentStatus
+    public let trust: EnvironmentTrust?
+    public let sessionhost: Bool?
+    public let platform: String?
     public let capabilities: [String]?
     public let worker: WorkerEnvironmentMetadata?
 
@@ -2021,6 +2065,9 @@ public struct EnvironmentsStatusResult: Codable, Sendable {
         type: String,
         label: String? = nil,
         status: EnvironmentStatus,
+        trust: EnvironmentTrust? = nil,
+        sessionhost: Bool? = nil,
+        platform: String? = nil,
         capabilities: [String]? = nil,
         worker: WorkerEnvironmentMetadata? = nil)
     {
@@ -2028,6 +2075,9 @@ public struct EnvironmentsStatusResult: Codable, Sendable {
         self.type = type
         self.label = label
         self.status = status
+        self.trust = trust
+        self.sessionhost = sessionhost
+        self.platform = platform
         self.capabilities = capabilities
         self.worker = worker
     }
@@ -2037,6 +2087,9 @@ public struct EnvironmentsStatusResult: Codable, Sendable {
         case type
         case label
         case status
+        case trust
+        case sessionhost = "sessionHost"
+        case platform
         case capabilities
         case worker
     }
