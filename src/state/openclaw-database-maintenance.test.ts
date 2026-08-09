@@ -7,7 +7,8 @@ import {
   OPENCLAW_AGENT_SCHEMA_VERSION,
 } from "./openclaw-agent-db.js";
 import { OPENCLAW_AGENT_SCHEMA_SQL } from "./openclaw-agent-schema.js";
-import { CLAW_LAZY_ADDITIVE_STATE_COLUMN_DEFINITIONS } from "./openclaw-state-db-contract.js";
+import { CLAW_LAZY_ADDITIVE_STATE_COLUMN_DEFINITIONS } from "./openclaw-state-db-additive-columns.js";
+import { CLAW_LAZY_ADDITIVE_STATE_COLUMNS } from "./openclaw-state-db-maintenance.js";
 import { ensureAdditiveStateColumns } from "./openclaw-state-db-schema-additive.js";
 import {
   assertOpenClawStateDatabaseForMaintenance,
@@ -124,6 +125,11 @@ describe("OpenClaw database maintenance schema validation", () => {
   });
 
   it("keeps every registered same-version column bare, canonical, and ensured", () => {
+    expect(
+      CLAW_LAZY_ADDITIVE_STATE_COLUMN_DEFINITIONS.map(
+        ({ columnName, tableName }) => `${tableName}.${columnName}`,
+      ),
+    ).toEqual(CLAW_LAZY_ADDITIVE_STATE_COLUMNS);
     expect(
       CLAW_LAZY_ADDITIVE_STATE_COLUMN_DEFINITIONS.map(
         ({ columnName, dataType, tableName }) => `${tableName}.${columnName} ${dataType}`,
