@@ -111,6 +111,7 @@ export function createTelegramInboundMedia({
   const {
     resolveMediaRuntime,
     recordMessageResolvedMedia,
+    recordMessageMediaUnavailableReason,
     promptContextBoundaryOptions,
     latestPromptContextMinTimestampMs,
     latestPromptContextAmbientWatermark,
@@ -362,6 +363,12 @@ export function createTelegramInboundMedia({
         if (media) {
           if (media.path) {
             await recordMessageResolvedMedia({ msg, media, botUserId: ctx.me?.id });
+          } else if (media.unavailableReason) {
+            await recordMessageMediaUnavailableReason({
+              msg,
+              reason: media.unavailableReason,
+              botUserId: ctx.me?.id,
+            });
           }
           allMedia.push({
             ...(media.path ? { path: media.path } : {}),

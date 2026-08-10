@@ -143,7 +143,6 @@ describe("buildTelegramMessageContext prompt context", () => {
       text: "older unrelated DM",
       from: { id: 1234, is_bot: false, first_name: "Pat" },
     } as never);
-
     const currentMessage = {
       chat,
       message_id: 12,
@@ -288,6 +287,13 @@ describe("buildTelegramMessageContext prompt context", () => {
         is_video: false,
       },
     } as never);
+    await messageContextRuntime.recordMessageMediaUnavailableReason({
+      msg: {
+        chat,
+        message_id: 10,
+      } as never,
+      reason: "animated-sticker",
+    });
     const currentMessage = {
       chat,
       message_id: 11,
@@ -304,9 +310,6 @@ describe("buildTelegramMessageContext prompt context", () => {
       cfg,
       telegramCfg,
       undefined,
-      new Map([
-        ["10", { kind: "sticker" as const, unavailableReason: "animated-sticker" as const }],
-      ]),
     );
 
     expect(promptContext).toEqual([

@@ -219,7 +219,7 @@ describe("buildTelegramMessageContext forwarded debounce batches", () => {
         },
       ],
       options: {
-        inboundDebounceMessages: [
+        bufferedMessages: [
           {
             message_id: 1,
             date: 1_700_000_000,

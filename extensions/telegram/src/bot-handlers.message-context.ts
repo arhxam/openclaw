@@ -344,6 +344,19 @@ export function createTelegramMessageContextRuntime({
       ...(params.botUserId !== undefined ? { botUserId: params.botUserId } : {}),
     });
 
+  const recordMessageMediaUnavailableReason = (params: {
+    msg: Message;
+    reason: NonNullable<TelegramMediaRef["unavailableReason"]>;
+    botUserId?: number;
+  }) =>
+    messageCache.recordMediaUnavailableReason({
+      accountId,
+      chatId: params.msg.chat.id,
+      messageId: String(params.msg.message_id),
+      reason: params.reason,
+      ...(params.botUserId !== undefined ? { botUserId: params.botUserId } : {}),
+    });
+
   const recordReplyMessageResolvedMedia = async (params: {
     chatId: string | number;
     messageId: string;
@@ -366,6 +379,17 @@ export function createTelegramMessageContextRuntime({
       ...(params.botUserId !== undefined ? { botUserId: params.botUserId } : {}),
     });
   };
+
+  const recordReplyMessageMediaUnavailableReason = (params: {
+    chatId: string | number;
+    messageId: string;
+    reason: NonNullable<TelegramMediaRef["unavailableReason"]>;
+    botUserId?: number;
+  }) =>
+    messageCache.recordMediaUnavailableReason({
+      accountId,
+      ...params,
+    });
 
   // `MessageReactionUpdated` carries no `message_thread_id`, so the reaction handler
   // recovers the originating topic from the same bounded cache that records inbound
@@ -399,16 +423,17 @@ export function createTelegramMessageContextRuntime({
       ...entry
     } = node;
     const projectedEntry = { ...entry, sender: resolvePromptSender(node, ctx) };
-    if (!media?.path && !media?.unavailableReason) {
+    const unavailableReason = media?.unavailableReason ?? node.mediaUnavailableReason;
+    if (!media?.path && !unavailableReason) {
       return projectedEntry;
     }
     const { mediaRef: _mediaRef, ...entryWithoutProviderMediaRef } = projectedEntry;
     return {
       ...entryWithoutProviderMediaRef,
-      ...(media.path ? { mediaPath: media.path } : {}),
-      mediaKind: media.kind,
-      ...(media.contentType ? { mediaType: media.contentType } : {}),
-      ...(media.unavailableReason ? { mediaUnavailableReason: media.unavailableReason } : {}),
+      ...(media?.path ? { mediaPath: media.path } : {}),
+      mediaKind: media?.kind ?? "sticker",
+      ...(media?.contentType ? { mediaType: media.contentType } : {}),
+      ...(unavailableReason ? { mediaUnavailableReason: unavailableReason } : {}),
     };
   };
 
@@ -418,8 +443,9 @@ export function createTelegramMessageContextRuntime({
     flags?: { replyTarget?: boolean },
     media?: TelegramMediaRef,
   ) => {
-    const unavailableNotice = media?.unavailableReason
-      ? formatTelegramUnavailableStickerNotice(media.unavailableReason)
+    const unavailableReason = media?.unavailableReason ?? node.mediaUnavailableReason;
+    const unavailableNotice = unavailableReason
+      ? formatTelegramUnavailableStickerNotice(unavailableReason)
       : undefined;
     const body = [node.body, unavailableNotice].filter(Boolean).join("\n");
     return {
@@ -430,9 +456,10 @@ export function createTelegramMessageContextRuntime({
       sender_username: node.senderUsername,
       timestamp_ms: node.timestamp,
       body: body || undefined,
-      media_type: media?.contentType ?? media?.kind ?? node.mediaType,
+      media_type:
+        media?.contentType ?? media?.kind ?? (unavailableReason ? "sticker" : node.mediaType),
       media_path: media?.path,
-      media_ref: media?.path || media?.unavailableReason ? undefined : node.mediaRef,
+      media_ref: media?.path || unavailableReason ? undefined : node.mediaRef,
       reply_to_id: node.replyToId,
       is_reply_target: flags?.replyTarget === true ? true : undefined,
     };
@@ -555,7 +582,9 @@ export function createTelegramMessageContextRuntime({
   return {
     recordMessageForReplyChain,
     recordMessageResolvedMedia,
+    recordMessageMediaUnavailableReason,
     recordReplyMessageResolvedMedia,
+    recordReplyMessageMediaUnavailableReason,
     resolveCachedMessageThreadSpec,
     buildReplyChainForMessage,
     toReplyChainEntry,
