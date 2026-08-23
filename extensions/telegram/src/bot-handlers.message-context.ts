@@ -13,13 +13,13 @@ import { asFiniteNumber } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { stripInlineDirectiveTagsForDelivery } from "openclaw/plugin-sdk/text-chunking";
 import { resolveDefaultModelForAgent } from "./bot-handlers.agent.runtime.js";
 import type { RegisterTelegramHandlerParams } from "./bot-handlers.types.js";
+import { formatTelegramUnavailableStickerNotice } from "./bot-message-context.body.js";
 import type { TelegramMediaRef } from "./bot-message-context.js";
 import type {
   TelegramAmbientTranscriptWatermark,
   TelegramMessageContextOptions,
   TelegramPromptContextEntry,
 } from "./bot-message-context.types.js";
-import { formatTelegramUnavailableStickerNotice } from "./bot-message-context.body.js";
 import {
   buildSenderName,
   getTelegramTextParts,

@@ -124,6 +124,11 @@ export interface TelegramMessagePipeline {
     media: TelegramResolvedMedia;
     botUserId?: number;
   }) => Promise<void>;
+  recordMessageMediaUnavailableReason: (params: {
+    msg: Message;
+    reason: NonNullable<TelegramMediaRef["unavailableReason"]>;
+    botUserId?: number;
+  }) => Promise<void>;
   resolveCachedMessageThreadSpec: (params: {
     chatId: number | string;
     messageId: number | string;
