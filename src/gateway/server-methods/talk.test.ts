@@ -15,7 +15,9 @@ import { talkHandlers } from "./talk.js";
 
 const mocks = vi.hoisted(() => ({
   getRuntimeConfig: vi.fn<() => OpenClawConfig>(),
+  getUserPreferences: vi.fn<() => Record<string, unknown>>(() => ({})),
   readConfigFileSnapshot: vi.fn(),
+  resolveUserProfileId: vi.fn((profileId: string) => profileId),
   canonicalizeSpeechProviderId: vi.fn((providerId: string | undefined) => providerId),
   getSpeechProvider: vi.fn(),
   listSpeechProviders: vi.fn(() => []),
@@ -93,6 +95,16 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../config/config.js", () => ({
   readConfigFileSnapshot: mocks.readConfigFileSnapshot,
+}));
+
+vi.mock("../../state/user-preferences.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../state/user-preferences.js")>()),
+  getUserPreferences: mocks.getUserPreferences,
+}));
+
+vi.mock("../../state/user-profiles.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../state/user-profiles.js")>()),
+  resolveUserProfileId: mocks.resolveUserProfileId,
 }));
 
 vi.mock("../../tts/provider-registry.js", () => ({
@@ -1118,6 +1130,54 @@ describe("talk.config handler", () => {
     },
   );
 
+  it.each([
+    {
+      name: "prefers the authenticated profile accent over gateway appearance defaults",
+      profileId: "profile-1",
+      profileAccent: "#A1B2C3",
+      expectedAccent: "#a1b2c3",
+    },
+    {
+      name: "ignores malformed authenticated profile accents",
+      profileId: "profile-1",
+      profileAccent: "not-a-color",
+      expectedAccent: "#52c99a",
+    },
+    {
+      name: "keeps profile-less callers on their existing gateway accent path",
+      expectedAccent: "#52c99a",
+    },
+  ])("$name", async ({ profileId, profileAccent, expectedAccent }) => {
+    markTalkOwnerCold("tts");
+    const runtimeConfig = createTalkConfig("healthy-talk-key");
+    mocks.getSpeechProvider.mockReturnValue({ id: "acme" });
+    mocks.getUserPreferences.mockReturnValue(
+      profileAccent === undefined ? {} : { "ui.accent": profileAccent },
+    );
+    mocks.readConfigFileSnapshot.mockResolvedValue({
+      config: { ...runtimeConfig, ui: { seamColor: "#123456", prefs: { accent: "#52c99a" } } },
+    });
+    const respond = vi.fn();
+
+    await callTalkHandler("talk.config", {
+      params: {},
+      client: {
+        connect: { scopes: ["operator.read"] },
+        ...(profileId ? { authenticatedUserProfile: { profileId } } : {}),
+      },
+      respond,
+      context: { getRuntimeConfig: () => runtimeConfig },
+    });
+
+    expect(respond.mock.calls[0]?.[0]).toBe(true);
+    expect(respond.mock.calls[0]?.[1]?.config?.ui).toEqual({ seamColor: expectedAccent });
+    if (profileId) {
+      expect(mocks.getUserPreferences).toHaveBeenCalledWith(profileId, ["ui.accent"]);
+    } else {
+      expect(mocks.getUserPreferences).not.toHaveBeenCalled();
+    }
+  });
+
   it("projects the runtime realtime transport when source config is invalid", async () => {
     mocks.readConfigFileSnapshot.mockResolvedValue({
       path: "/tmp/openclaw.json",
@@ -1817,8 +1877,12 @@ describe("talk.session unified handlers", () => {
     });
 
     const cancelRespond = vi.fn();
+    mocks.cancelTalkRealtimeRelayTurn.mockResolvedValueOnce({
+      status: "applied",
+      turnId: "turn-7",
+    });
     await callTalkHandler("talk.session.cancelOutput", {
-      params: { sessionId: "relay-unified-1", reason: "barge-in" },
+      params: { sessionId: "relay-unified-1", reason: "barge-in", turnId: "turn-7" },
       id: "3",
       respond: cancelRespond,
       context: {},
@@ -1827,6 +1891,25 @@ describe("talk.session unified handlers", () => {
       relaySessionId: "relay-unified-1",
       connId: "conn-1",
       reason: "barge-in",
+      turnId: "turn-7",
+    });
+    expectRespondOk(cancelRespond, { ok: true, status: "applied", turnId: "turn-7" });
+    for (const status of ["stale", "idle"] as const) {
+      const nonAppliedRespond = vi.fn();
+      mocks.cancelTalkRealtimeRelayTurn.mockResolvedValueOnce({ status });
+      await callTalkHandler("talk.session.cancelOutput", {
+        params: { sessionId: "relay-unified-1", reason: "barge-in", turnId: "turn-old" },
+        id: `3-${status}`,
+        respond: nonAppliedRespond,
+        context: {},
+      });
+      expectRespondOk(nonAppliedRespond, { ok: true, status });
+    }
+    expect(mocks.cancelTalkRealtimeRelayTurn).toHaveBeenLastCalledWith({
+      relaySessionId: "relay-unified-1",
+      connId: "conn-1",
+      reason: "barge-in",
+      turnId: "turn-old",
     });
 
     const markRespond = vi.fn();

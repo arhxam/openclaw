@@ -229,6 +229,10 @@ class TooltipProvider extends OpenClawLitElement {
 class Tooltip extends OpenClawLitElement {
   @property() content = "";
 
+  @property({ type: Number }) closeDelay = RICH_CONTENT_CLOSE_DELAY;
+
+  @property({ type: Number }) delay?: number;
+
   @property({ type: Boolean }) describe = true;
 
   @property({ type: Boolean }) disabled = false;
@@ -272,6 +276,8 @@ class Tooltip extends OpenClawLitElement {
       --wa-tooltip-border-style: solid;
       --wa-tooltip-content-color: var(--text);
       --wa-tooltip-border-radius: var(--openclaw-tooltip-border-radius, var(--radius-md));
+      --show-duration: var(--openclaw-tooltip-popup-show-duration, var(--wa-transition-fast));
+      --hide-duration: var(--openclaw-tooltip-popup-hide-duration, var(--wa-transition-fast));
       font-family: var(--font-body);
     }
 
@@ -282,6 +288,32 @@ class Tooltip extends OpenClawLitElement {
       font-weight: 500;
       line-height: 1.25;
       overflow-wrap: anywhere;
+    }
+
+    wa-tooltip[open]::part(body) {
+      animation: var(--openclaw-tooltip-open-animation, none);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      wa-tooltip {
+        --show-duration: 0ms;
+        --hide-duration: 0ms;
+      }
+
+      wa-tooltip[open]::part(body) {
+        animation: none;
+      }
+    }
+
+    @keyframes openclaw-tooltip-hover-card-in {
+      from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
     }
 
     .tooltip-content {
@@ -392,6 +424,7 @@ class Tooltip extends OpenClawLitElement {
   private readonly handlePointerLeave = (event: PointerEvent) => {
     if (event.pointerType !== "touch") {
       this.triggerHovered = false;
+      this.clearTimers(false);
       this.maybeClose();
     }
   };
@@ -455,7 +488,10 @@ class Tooltip extends OpenClawLitElement {
       return;
     }
     const provider = this.tooltipProvider;
-    const delay = provider?.delayed === false ? 0 : Math.max(0, provider?.delay ?? HOVER_DELAY);
+    const delay =
+      this.delay === undefined && provider?.delayed === false
+        ? 0
+        : Math.max(0, this.delay ?? provider?.delay ?? HOVER_DELAY);
     this.openTimer = window.setTimeout(() => {
       this.openTimer = null;
       this.show();
@@ -594,7 +630,7 @@ class Tooltip extends OpenClawLitElement {
       if (!this.shouldRemainOpen()) {
         this.close();
       }
-    }, RICH_CONTENT_CLOSE_DELAY);
+    }, this.closeDelay);
   }
 
   private clearTimers(resetHover = true) {

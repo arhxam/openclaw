@@ -31,7 +31,8 @@ import type {
   GatewayPluginEventScope,
 } from "./server-broadcast-types.js";
 import type { SessionMessageSubscriberRegistry } from "./server-chat-state.js";
-import { MAX_BUFFERED_BYTES } from "./server-constants.js";
+import { MAX_BUFFERED_BYTES, WEBSOCKET_OPEN_READY_STATE } from "./server-constants.js";
+import { GatewayClientRegistry } from "./server/client-registry.js";
 import type { GatewayWsClient } from "./server/ws-types.js";
 import { logWs, summarizeAgentEventForWsLog } from "./ws-log.js";
 
@@ -69,6 +70,7 @@ const EVENT_SCOPE_GUARDS: Record<string, string[]> = {
   // Hash-only change notice after a persisted config write; content stays
   // behind the operator-scoped config.get.
   "config.changed": [READ_SCOPE],
+  "users.prefs.changed": [READ_SCOPE],
   "skills.changed": [READ_SCOPE],
   "voicewake.changed": [READ_SCOPE],
   "voicewake.routing.changed": [READ_SCOPE],
@@ -89,6 +91,7 @@ const EVENT_SCOPE_GUARDS: Record<string, string[]> = {
   "session.observer": [READ_SCOPE],
   "session.operation": [READ_SCOPE],
   "session.sharing": [READ_SCOPE],
+  "session.sharing.evidence": [READ_SCOPE],
   "session.suggestion": [READ_SCOPE],
   "session.typing": [READ_SCOPE],
   "session.tool": [READ_SCOPE],
@@ -218,6 +221,8 @@ export function createGatewayBroadcaster(params: {
 }) {
   const clientSeq = new WeakMap<GatewayWsClient, number>();
   const reportedSlowPayloadClients = new WeakSet<GatewayWsClient>();
+  const indexedClients =
+    params.clients instanceof GatewayClientRegistry ? params.clients : undefined;
 
   const broadcastInternal = (
     event: string,
@@ -268,11 +273,16 @@ export function createGatewayBroadcaster(params: {
     const isSessionSubscriptionEvent = SESSION_SUBSCRIPTION_EVENTS.has(event);
     const sessionMessageSubscribers = params.sessionMessageSubscribers;
     let sessionSubscriberConnIdsByKey: Array<ReadonlySet<string> | undefined> | undefined;
-    for (const c of params.clients) {
-      if (c.invalidated === true) {
+    const recipients =
+      targetConnIds && indexedClients
+        ? indexedClients.getByConnectionIds(targetConnIds)
+        : params.clients;
+    for (const c of recipients) {
+      // Closing nodes remain discoverable until their owner drains admitted lifecycle work.
+      if (c.invalidated === true || c.socket.readyState !== WEBSOCKET_OPEN_READY_STATE) {
         continue;
       }
-      if (targetConnIds && !targetConnIds.has(c.connId)) {
+      if (targetConnIds && !indexedClients && !targetConnIds.has(c.connId)) {
         continue;
       }
       if (!hasEventScope(c, event, explicitPluginScope)) {
@@ -357,6 +367,7 @@ export function createGatewayBroadcaster(params: {
         } catch {
           /* ignore */
         }
+        c.socket.terminate();
         continue;
       }
       // Build the frame before consuming the seq: a serialization failure
@@ -377,9 +388,9 @@ export function createGatewayBroadcaster(params: {
       clientSeq.set(c, nextSeq);
       try {
         c.socket.send(frame);
-      } catch {
-        // The consumed seq makes this send failure visible to the client's
-        // gap detector on its next received frame.
+      } catch (err) {
+        log.error(`broadcast send failed conn=${c.connId}: ${formatErrorMessage(err)}`, { event });
+        c.socket.terminate();
       }
     }
   };
@@ -392,6 +403,9 @@ export function createGatewayBroadcaster(params: {
   };
 
   const getBufferedAmount: GatewayBufferedAmountFn = (connId) => {
+    if (indexedClients) {
+      return indexedClients.getByConnectionId(connId)?.socket.bufferedAmount;
+    }
     for (const client of params.clients) {
       if (client.connId === connId) {
         return client.socket.bufferedAmount;

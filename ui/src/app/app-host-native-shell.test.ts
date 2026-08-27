@@ -2,6 +2,8 @@
 
 import { render } from "lit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import "../components/sidebar-update-card.ts";
+import { getRenderedModalDialog, installDialogPolyfill } from "../test-helpers/modal-dialog.ts";
 import "./app-host.ts";
 import { resetAppHostTestGlobals, type ShellKeyboardState } from "./app-host.test-support.ts";
 import type { ApplicationContext } from "./context.ts";
@@ -21,7 +23,7 @@ type ShellNavigationState = {
 };
 
 type ShellSettingsEscapeState = ShellKeyboardState & {
-  lastWorkspaceLocation: { routeId: "usage"; pathname: string; search: string };
+  lastWorkspaceLocation: { routeId: "usage"; pathname: string; search: string; hash: string };
   navDrawerOpen: boolean;
   routeState: { routeId: "appearance" };
 };
@@ -113,6 +115,35 @@ describe("OpenClaw native shell", () => {
     expect(navigate).toHaveBeenCalledWith("appearance", undefined);
   });
 
+  it("restores the complete prior workspace URL when Escape leaves Settings", () => {
+    const navigate = vi.fn();
+    const shell = document.createElement(
+      "openclaw-app-shell",
+    ) as unknown as ShellSettingsEscapeState;
+    shell.runtime = {
+      context: {
+        navigate,
+        overlays: { snapshot: { devicePairSetupOpen: false } },
+      } as unknown as ApplicationContext,
+    };
+    shell.lastWorkspaceLocation = {
+      routeId: "usage",
+      pathname: "/usage",
+      search: "?agent=main",
+      hash: "#queue",
+    };
+    shell.navDrawerOpen = false;
+    shell.routeState = { routeId: "appearance" };
+
+    shell.handleDocumentKeydown(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+
+    expect(navigate).toHaveBeenCalledWith("usage", {
+      pathname: "/usage",
+      search: "?agent=main",
+      hash: "#queue",
+    });
+  });
+
   it("keeps the raw config editor unchanged when Escape is pressed", () => {
     const navigate = vi.fn();
     const shell = document.createElement(
@@ -124,7 +155,7 @@ describe("OpenClaw native shell", () => {
         overlays: { snapshot: { devicePairSetupOpen: false } },
       } as unknown as ApplicationContext,
     };
-    shell.lastWorkspaceLocation = { routeId: "usage", pathname: "/usage", search: "" };
+    shell.lastWorkspaceLocation = { routeId: "usage", pathname: "/usage", search: "", hash: "" };
     shell.navDrawerOpen = false;
     shell.routeState = { routeId: "appearance" };
     const rawField = document.body.appendChild(document.createElement("label"));
@@ -145,6 +176,42 @@ describe("OpenClaw native shell", () => {
       expect(navigate).not.toHaveBeenCalled();
     } finally {
       rawField.remove();
+    }
+  });
+
+  it("lets a shadow-root confirmation own Escape without leaving Settings", async () => {
+    const restoreDialogPolyfill = installDialogPolyfill();
+    const navigate = vi.fn();
+    const shell = document.createElement(
+      "openclaw-app-shell",
+    ) as unknown as ShellSettingsEscapeState;
+    shell.runtime = {
+      context: {
+        navigate,
+        overlays: { snapshot: { devicePairSetupOpen: false } },
+      } as unknown as ApplicationContext,
+    };
+    shell.lastWorkspaceLocation = { routeId: "usage", pathname: "/usage", search: "", hash: "" };
+    shell.navDrawerOpen = false;
+    shell.routeState = { routeId: "appearance" };
+    const container = document.body.appendChild(document.createElement("div"));
+    const modal = container.appendChild(document.createElement("openclaw-modal-dialog"));
+    const cancel = modal.appendChild(document.createElement("button"));
+
+    try {
+      const { dialog } = await getRenderedModalDialog(container);
+      expect(dialog.open).toBe(true);
+      expect(document.querySelector("dialog[open]")).toBeNull();
+      cancel.addEventListener("keydown", (event) => shell.handleDocumentKeydown(event));
+      const event = new KeyboardEvent("keydown", { key: "Escape", cancelable: true });
+
+      cancel.dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(false);
+      expect(navigate).not.toHaveBeenCalled();
+    } finally {
+      container.remove();
+      restoreDialogPolyfill();
     }
   });
 
@@ -423,7 +490,7 @@ describe("OpenClaw native shell", () => {
 });
 
 describe("OpenClaw shell update affordance", () => {
-  it("renders floating attention and loud update states only while navigation is collapsed", async () => {
+  it("renders floating attention while keeping update actions in navigation", async () => {
     const container = document.createElement("div");
     document.body.append(container);
     const shared = {
@@ -447,21 +514,10 @@ describe("OpenClaw shell update affordance", () => {
       mobileNavLayout: false,
     });
     render(renderFloatingUpdateCard({ ...shared, navigationSurfaceHidden: collapsed }), container);
-    const card = container.querySelector<
-      HTMLElement & {
-        canUpdate: boolean;
-        onRefresh: () => void;
-        refreshRequired: boolean;
-        updateComplete: Promise<boolean>;
-      }
-    >("openclaw-sidebar-update-card");
-    expect(card).not.toBeNull();
     expect(
       container.querySelector("openclaw-sidebar-attention.sidebar-attention--floating"),
     ).not.toBeNull();
-    await card?.updateComplete;
-    expect(card?.canUpdate).toBe(true);
-    expect(card?.querySelector(".sidebar-update-card")).toBeNull();
+    expect(container.querySelector("openclaw-sidebar-update-card")).toBeNull();
 
     render(
       renderFloatingUpdateCard({
@@ -472,8 +528,11 @@ describe("OpenClaw shell update affordance", () => {
       }),
       container,
     );
-    expect(card?.refreshRequired).toBe(true);
-    card?.onRefresh();
+    const refreshCard = container.querySelector<
+      HTMLElement & { onRefresh: () => void; refreshRequired: boolean }
+    >("openclaw-sidebar-update-card");
+    expect(refreshCard?.refreshRequired).toBe(true);
+    refreshCard?.onRefresh();
     expect(shared.onRefresh).toHaveBeenCalledOnce();
     expect(shared.onUpdate).not.toHaveBeenCalled();
 
@@ -492,7 +551,7 @@ describe("OpenClaw shell update affordance", () => {
       }),
       container,
     );
-    expect(container.querySelector("openclaw-sidebar-update-card")).toBeNull();
+    expect(container.querySelector("openclaw-sidebar-update-card")).not.toBeNull();
     container.remove();
   });
 
@@ -564,6 +623,9 @@ describe("OpenClaw shell update affordance", () => {
 
     for (const navigationSurfaceHidden of [false, true]) {
       render(renderFloatingUpdateCard({ ...shared, navigationSurfaceHidden }), container);
+      expect(
+        container.querySelector("openclaw-sidebar-attention.sidebar-attention--floating") !== null,
+      ).toBe(navigationSurfaceHidden);
       const cards = container.querySelectorAll<HTMLElement & { refreshRequired: boolean }>(
         "openclaw-sidebar-update-card",
       );

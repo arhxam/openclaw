@@ -124,6 +124,7 @@ export type GatewaySessionRow = {
   pinnedAt?: number;
   unread?: boolean;
   lastReadAt?: number;
+  markedUnreadAt?: number;
   agentStatus?: SessionEntry["agentStatus"];
   observerDigest?: Pick<
     SessionObserverDigest,
@@ -164,6 +165,8 @@ export type GatewaySessionRow = {
   status?: SessionRunStatus;
   /** Compact user-facing reason for the latest failed or timed-out run. */
   lastRunError?: string;
+  /** Exact run that produced the latest terminal lifecycle projection. */
+  lastRunId?: string;
   hasActiveRun?: boolean;
   /** Complete exact active set when present; omitted for active owners without exact identities. */
   activeRunIds?: string[];
@@ -187,6 +190,7 @@ export type GatewaySessionRow = {
   effectiveQueueMode?: QueueMode;
   modelProvider?: string;
   model?: string;
+  modelOverrideSource?: "user" | "auto" | null;
   modelSelectionLocked?: boolean;
   agentRuntime?: GatewayAgentRuntime;
   contextTokens?: number;
